@@ -120,10 +120,15 @@ def main():
     col1, col2 = st.columns([4, 1])
     
     with col1:
+        # Inicializar user_input en session_state si no existe
+        if 'user_input' not in st.session_state:
+            st.session_state.user_input = ""
+        
         user_input = st.text_input(
             "Escribe tu mensaje aquí:",
             placeholder="Ej: Gasté $50,000 en comida",
-            key="user_input"
+            value=st.session_state.user_input,
+            key="user_input_widget"
         )
     
     with col2:
@@ -131,10 +136,12 @@ def main():
         st.session_state.debug_mode = debug_toggle
     
     # Botón para enviar
-    if st.button("Enviar", type="primary") or user_input:
-        if user_input:
+    if st.button("Enviar", type="primary"):
+        if user_input and user_input.strip():
             # Procesar mensaje
-            process_message(user_input, st.session_state.debug_mode)
+            process_message(user_input.strip(), st.session_state.debug_mode)
+            # Limpiar el input después de procesar
+            st.session_state.user_input = ""
             st.rerun()
 
 def process_message(message, debug_mode=False):
