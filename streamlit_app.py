@@ -163,7 +163,7 @@ def process_message(message, debug_mode=False):
         st.session_state.intents_detected.add(intent)
         
         # Generar respuesta
-        response = generate_response(intent, entities, message, debug_mode)
+        response = generate_response(intent, entities, message, debug_mode, confidence)
         
         # Agregar respuesta del bot
         st.session_state.messages.append({
@@ -180,7 +180,7 @@ def process_message(message, debug_mode=False):
             'timestamp': datetime.now()
         })
 
-def generate_response(intent, entities, message, debug_mode=False):
+def generate_response(intent, entities, message, debug_mode=False, confidence=0.0):
     """Genera la respuesta del bot."""
     response = ""
     
