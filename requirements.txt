@@ -1,0 +1,14 @@
+# Framework para manejar las solicitudes web
+Flask==3.0.3
+
+# Librería oficial de Twilio para responder a WhatsApp
+twilio==9.1.0
+
+# Librería de Google para interactuar con la base de datos
+google-cloud-firestore==2.16.0
+
+# Librería de Google para comunicarnos con Dialogflow
+google-cloud-dialogflow==2.41.2
+
+# Framework para aplicaciones web interactivas
+streamlit==1.28.1
