@@ -134,7 +134,9 @@ Analiza este mensaje y decide el flujo apropiado.
         # Palabras clave para conversación con asesor
         advisor_keywords = [
             'cómo', 'qué', 'por qué', 'ayuda', 'recomienda', 'mejorar',
-            'invertir', 'ahorrar', 'presupuesto', 'planificar', 'finanzas'
+            'invertir', 'ahorrar', 'presupuesto', 'planificar', 'finanzas',
+            'como vas', 'como estás', 'que tal', 'hola', 'saludos',
+            'no se me dan', 'difícil', 'ayúdame', 'consejo', 'tips'
         ]
         
         automated_score = sum(1 for keyword in automated_keywords if keyword in message_lower)
@@ -181,13 +183,13 @@ Contexto del usuario: {json.dumps(user_context, ensure_ascii=False) if user_cont
 Mensaje del usuario: "{message}"
 
 IMPORTANTE: Responde como Phill, el asesor financiero. Sé útil, práctico y mantén el tono amigable colombiano.
-- Si el usuario quiere registrar un gasto específico, ayúdale con consejos sobre categorización y ahorro
-- Si pregunta sobre finanzas generales, da consejos prácticos
-- Si es una consulta muy específica sobre datos, sugiere usar comandos automatizados
-- Si el usuario quiere registrar un gasto pero no especificó el monto, pregúntale por el monto y ayúdale a completar el registro
-- SIEMPRE da una respuesta útil y relevante, nunca solo un saludo
 
-Responde ahora:
+Ejemplos de respuestas útiles:
+- Si dice "Las finanzas no se me dan": "¡Dale parcero! No te preocupes, todos empezamos así. Te voy a ayudar paso a paso. ¿Qué te parece si empezamos registrando tus gastos diarios? Así vemos por dónde se va la plata 💰"
+- Si dice "Como vas": "¡Esoooo! Todo bien, aquí ayudándote con las finanzas. ¿En qué te puedo ayudar hoy? ¿Quieres registrar algún gasto o necesitas consejos? 🚀"
+- Si dice "claro que si": "¡Perfecto! Me encanta esa actitud. ¿Por dónde empezamos? ¿Quieres que te ayude a registrar gastos, crear un presupuesto o necesitas consejos financieros? 💪"
+
+SIEMPRE da una respuesta útil y relevante, nunca solo un saludo. Responde ahora:
 """
             
             response = self.model.generate_content(advisor_prompt)
