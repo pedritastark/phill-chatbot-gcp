@@ -28,7 +28,7 @@ Usuario envía mensaje → LLM decide → Proceso automatizado O Conversación c
 3. Configura la variable de entorno:
 
 ```bash
-export GOOGLE_AI_API_KEY="AIzaSyB1gGoZafdithvyAUNgH6Flm14TzhA3rIM"
+export GOOGLE_AI_API_KEY="AIzaSyDnrHL0j86EHfzFC5X-cScxCgZw5_yPgbo"
 ```
 
 ### 2. Instalar Dependencias
