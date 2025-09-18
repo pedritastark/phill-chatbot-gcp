@@ -36,7 +36,7 @@ Tu tarea es analizar el mensaje del usuario y determinar si debe ser procesado p
 2. CONVERSACION_ASESOR: Para consultas complejas, consejos personalizados, o conversaciones generales
 
 PROCESOS AUTOMATIZADOS (usa PROCESO_AUTOMATIZADO):
-- Registrar gastos específicos: "Gasté $50,000 en comida"
+- Registrar gastos específicos: "Gasté $50,000 en comida", "Compré sandalias por $80,000"
 - Registrar ingresos: "Recibí $1,000,000 de salario"
 - Consultar balance: "¿Cuánto tengo?"
 - Ver resumen: "Muéstrame mis gastos del mes"
@@ -50,6 +50,7 @@ CONVERSACIÓN CON ASESOR (usa CONVERSACION_ASESOR):
 - Preguntas sobre inversiones: "¿Dónde debería invertir mi dinero?"
 - Planificación financiera: "¿Cómo hago un presupuesto?"
 - Dudas conceptuales: "¿Qué es el interés compuesto?"
+- Preguntas sobre categorización: "¿En qué categoría pongo las sandalias?"
 
 Responde SOLO con un JSON que contenga:
 {
@@ -124,9 +125,10 @@ Analiza este mensaje y decide el flujo apropiado.
         
         # Palabras clave para procesos automatizados
         automated_keywords = [
-            'gasté', 'gastar', 'compré', 'pagué', 'registrar', 'anotar',
+            'gasté', 'gastar', 'compré', 'comprar', 'pagué', 'pagar', 'registrar', 'anotar',
             'recibí', 'ingresó', 'salario', 'balance', 'resumen', 'cuánto',
-            'recordar', 'recordatorio', 'avisar', 'tip', 'consejo'
+            'recordar', 'recordatorio', 'avisar', 'tip', 'consejo',
+            'sandalias', 'ropa', 'comida', 'transporte', 'gasto', 'compra'
         ]
         
         # Palabras clave para conversación con asesor
@@ -178,12 +180,22 @@ Contexto del usuario: {json.dumps(user_context, ensure_ascii=False) if user_cont
 
 Mensaje del usuario: "{message}"
 
-Responde como Phill, el asesor financiero. Sé útil, práctico y mantén el tono amigable colombiano.
-Si el usuario pregunta algo muy específico sobre sus datos, puedes sugerirle usar los comandos automatizados.
+IMPORTANTE: Responde como Phill, el asesor financiero. Sé útil, práctico y mantén el tono amigable colombiano.
+- Si el usuario quiere registrar un gasto específico, ayúdale con consejos sobre categorización y ahorro
+- Si pregunta sobre finanzas generales, da consejos prácticos
+- Si es una consulta muy específica sobre datos, sugiere usar comandos automatizados
+- SIEMPRE da una respuesta útil y relevante, nunca solo un saludo
+
+Responde ahora:
 """
             
             response = self.model.generate_content(advisor_prompt)
-            return response.text.strip()
+            respuesta = response.text.strip()
+            print(f"=== RESPUESTA LLM ASESOR ===")
+            print(f"Prompt enviado: {advisor_prompt[:200]}...")
+            print(f"Respuesta recibida: {respuesta}")
+            print("=============================")
+            return respuesta
             
         except Exception as e:
             print(f"Error generando respuesta de asesor: {e}")
