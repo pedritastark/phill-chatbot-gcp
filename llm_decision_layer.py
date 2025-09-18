@@ -11,6 +11,7 @@ import google.generativeai as genai
 from typing import Dict, Tuple, Optional
 from datetime import datetime
 from saludos_config import get_saludos_activos
+from conversation_engine import conversation_engine
 
 class LLMDecisionLayer:
     """Capa de decisión que usa Google AI Studio (Gemini) para determinar el flujo del chatbot."""

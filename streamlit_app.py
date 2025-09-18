@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from intent_processor import intent_processor
-from llm_decision_layer import llm_decision_layer
+from llm_decision_layer_v2 import llm_decision_layer
 
 # Configuración de la página
 st.set_page_config(

@@ -6,7 +6,7 @@ from flask import Request
 from twilio.twiml.messaging_response import MessagingResponse
 from google.cloud import firestore
 from intent_processor import intent_processor
-from llm_decision_layer import llm_decision_layer
+from llm_decision_layer_v2 import llm_decision_layer
 
 # --- CONFIGURACIÓN INICIAL ---
 PROJECT_ID = os.environ.get('PROJECT_ID')
