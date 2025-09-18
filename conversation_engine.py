@@ -72,6 +72,30 @@ class ConversationEngine:
                 ],
                 "follow_up": "¿Ya tienes un fondo de emergencia? ¿Y cuál es tu perfil de riesgo: conservador, moderado o agresivo?"
             },
+            "conservative_investor": {
+                "responses": [
+                    "¡Perfecto! Ser conservador es muy inteligente. Te voy a recomendar opciones seguras y estables. 🛡️",
+                    "¡Esoooo! Me encanta que prefieras la seguridad. Te ayudo con inversiones de bajo riesgo. 💎",
+                    "¡Dale! Ser conservador es la base de un buen portafolio. Te guío con opciones seguras. 🏦"
+                ],
+                "follow_up": "Para un perfil conservador te recomiendo: 1) CDTs o depósitos a término, 2) Fondos de inversión de renta fija, 3) Bonos del gobierno. ¿Cuál te interesa más o tienes alguna pregunta específica?"
+            },
+            "moderate_investor": {
+                "responses": [
+                    "¡Esoooo! Un perfil moderado es perfecto para balancear riesgo y rendimiento. ⚖️",
+                    "¡Dale! Me encanta que busques equilibrio. Te ayudo con opciones balanceadas. 🎯",
+                    "¡Perfecto! Un perfil moderado te da lo mejor de ambos mundos. Te guío paso a paso. 🚀"
+                ],
+                "follow_up": "Para un perfil moderado te recomiendo: 1) Fondos mixtos (60% renta fija, 40% renta variable), 2) ETFs diversificados, 3) Portafolio balanceado. ¿Quieres que profundicemos en alguna opción?"
+            },
+            "aggressive_investor": {
+                "responses": [
+                    "¡Esoooo! Un perfil agresivo busca máximo rendimiento. Te ayudo con opciones de alto potencial. 🚀",
+                    "¡Dale! Me encanta que tengas apetito por el riesgo. Te guío con inversiones de crecimiento. 📈",
+                    "¡Perfecto! Un perfil agresivo puede generar grandes retornos. Te ayudo a hacerlo inteligentemente. 💪"
+                ],
+                "follow_up": "Para un perfil agresivo te recomiendo: 1) Acciones de empresas sólidas, 2) ETFs de mercados emergentes, 3) Fondos de crecimiento. ¿En qué mercado te interesa invertir?"
+            },
             "relationship_finances": {
                 "responses": [
                     "¡Esoooo! Las finanzas en pareja son súper importantes. Te ayudo a planificarlo bien. 💕",
@@ -114,6 +138,9 @@ class ConversationEngine:
             "budget_help": ["presupuesto", "presupuestar", "organizar", "gastos", "dinero"],
             "debt_concern": ["deuda", "debo", "préstamo", "tarjeta", "deber"],
             "investment_interest": ["invertir", "inversión", "crecer", "rendimiento", "ganar más"],
+            "conservative_investor": ["conservador", "conservadora", "seguro", "segura", "bajo riesgo", "estable"],
+            "moderate_investor": ["moderado", "moderada", "equilibrado", "equilibrada", "balanceado", "balanceada"],
+            "aggressive_investor": ["agresivo", "agresiva", "alto riesgo", "máximo rendimiento", "crecimiento"],
             "life_goals": ["vivir", "esposa", "novia", "pareja", "casarse", "matrimonio", "juntos", "futuro juntos"],
             "relationship_finances": ["pareja", "esposa", "novia", "marido", "novio", "juntos", "finanzas juntos"],
             "housing_goals": ["casa", "apartamento", "vivienda", "alquilar", "comprar", "mudarse", "vivir juntos"],
@@ -135,6 +162,7 @@ class ConversationEngine:
         
         # Buscar palabras clave en orden de prioridad (más específicas primero)
         priority_order = [
+            "conservative_investor", "moderate_investor", "aggressive_investor",
             "life_goals", "relationship_finances", "housing_goals", "wedding_planning",
             "savings_goal", "budget_help", "debt_concern", "investment_interest",
             "financial_struggle", "general_advice", "greeting"
