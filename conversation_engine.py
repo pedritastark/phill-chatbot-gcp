@@ -24,6 +24,14 @@ class ConversationEngine:
                 ],
                 "follow_up": "¿Quieres que empecemos registrando tus gastos, viendo tu balance o necesitas consejos específicos?"
             },
+            "life_goals": {
+                "responses": [
+                    "¡Esoooo! Me encanta que tengas metas claras. Vivir con tu esposa es un objetivo hermoso y requiere planificación financiera. 🏠",
+                    "¡Dale parcero! Esa es una meta muy importante. Te voy a ayudar a crear un plan financiero para lograrlo. 💕",
+                    "¡Perfecto! Vivir juntos es emocionante. Vamos a hacer un presupuesto que te permita alcanzar esa meta. 🚀"
+                ],
+                "follow_up": "Para ayudarte mejor, necesito saber: ¿cuándo quieres hacerlo? ¿Tienes ahorros actuales? ¿Ya sabes cuánto necesitarías mensualmente para vivir juntos?"
+            },
             "financial_struggle": {
                 "responses": [
                     "¡Dale parcero! No te preocupes, todos pasamos por eso. Las finanzas se pueden mejorar paso a paso. 🚀",
@@ -63,6 +71,38 @@ class ConversationEngine:
                     "¡Perfecto! Invertir es clave para la libertad financiera. Vamos a hacerlo con cabeza. 🚀"
                 ],
                 "follow_up": "¿Ya tienes un fondo de emergencia? ¿Y cuál es tu perfil de riesgo: conservador, moderado o agresivo?"
+            },
+            "relationship_finances": {
+                "responses": [
+                    "¡Esoooo! Las finanzas en pareja son súper importantes. Te ayudo a planificarlo bien. 💕",
+                    "¡Dale! Me encanta que pienses en el futuro juntos. Vamos a crear un plan sólido. 🏠",
+                    "¡Perfecto! Vivir en pareja requiere organización financiera. Te guío paso a paso. 🚀"
+                ],
+                "follow_up": "¿Ya hablaron sobre cómo van a manejar los gastos? ¿Cuentas separadas o juntas? ¿Tienen metas financieras en común?"
+            },
+            "housing_goals": {
+                "responses": [
+                    "¡Esoooo! Conseguir vivienda es una meta importante. Te ayudo a planificarlo. 🏠",
+                    "¡Dale! Buscar casa o apartamento requiere presupuesto. Vamos a calcularlo. 💰",
+                    "¡Perfecto! La vivienda es una inversión grande. Te guío en el proceso. 🎯"
+                ],
+                "follow_up": "¿Están pensando en alquilar o comprar? ¿Ya tienen un presupuesto en mente? ¿En qué zona buscan?"
+            },
+            "wedding_planning": {
+                "responses": [
+                    "¡Esoooo! ¡Felicitaciones! Una boda requiere mucha planificación financiera. 💒",
+                    "¡Dale! Me encanta ayudarte con esta meta tan especial. Vamos a hacer un presupuesto. 💕",
+                    "¡Perfecto! Las bodas son hermosas pero costosas. Te ayudo a planificarlo bien. 🎉"
+                ],
+                "follow_up": "¿Ya tienen una fecha en mente? ¿Cuál es su presupuesto aproximado? ¿Están pensando en algo íntimo o grande?"
+            },
+            "general_advice": {
+                "responses": [
+                    "¡Esoooo! Me encanta ayudarte con consejos financieros. Te doy opciones prácticas. 💡",
+                    "¡Dale! Phill está aquí para darte la mejor orientación financiera. 🚀",
+                    "¡Perfecto! Te voy a dar consejos que realmente funcionan. 💪"
+                ],
+                "follow_up": "¿En qué área específica necesitas ayuda? ¿Presupuesto, ahorro, inversión, o algo más específico?"
             }
         }
         
@@ -73,7 +113,12 @@ class ConversationEngine:
             "savings_goal": ["ahorro", "ahorrar", "guardar", "meta", "objetivo", "futuro"],
             "budget_help": ["presupuesto", "presupuestar", "organizar", "gastos", "dinero"],
             "debt_concern": ["deuda", "debo", "préstamo", "tarjeta", "deber"],
-            "investment_interest": ["invertir", "inversión", "crecer", "rendimiento", "ganar más"]
+            "investment_interest": ["invertir", "inversión", "crecer", "rendimiento", "ganar más"],
+            "life_goals": ["vivir", "esposa", "novia", "pareja", "casarse", "matrimonio", "juntos", "futuro juntos"],
+            "relationship_finances": ["pareja", "esposa", "novia", "marido", "novio", "juntos", "finanzas juntos"],
+            "housing_goals": ["casa", "apartamento", "vivienda", "alquilar", "comprar", "mudarse", "vivir juntos"],
+            "wedding_planning": ["boda", "casarse", "matrimonio", "ceremonia", "novios", "compromiso"],
+            "general_advice": ["consejo", "ayuda", "orientación", "guía", "qué hacer", "cómo", "recomendación"]
         }
         
         # Personalidad de Phill
@@ -88,13 +133,21 @@ class ConversationEngine:
         """Detecta el contexto de la conversación basado en el mensaje"""
         message_lower = message.lower()
         
-        # Buscar palabras clave en orden de prioridad
-        for context, keywords in self.context_keywords.items():
-            if any(keyword in message_lower for keyword in keywords):
-                return context
+        # Buscar palabras clave en orden de prioridad (más específicas primero)
+        priority_order = [
+            "life_goals", "relationship_finances", "housing_goals", "wedding_planning",
+            "savings_goal", "budget_help", "debt_concern", "investment_interest",
+            "financial_struggle", "general_advice", "greeting"
+        ]
         
-        # Si no encuentra contexto específico, usar greeting
-        return "greeting"
+        for context in priority_order:
+            if context in self.context_keywords:
+                keywords = self.context_keywords[context]
+                if any(keyword in message_lower for keyword in keywords):
+                    return context
+        
+        # Si no encuentra contexto específico, usar general_advice
+        return "general_advice"
 
     def generate_contextual_response(self, message: str, user_context: Optional[Dict] = None) -> str:
         """Genera una respuesta contextual y fluida"""
