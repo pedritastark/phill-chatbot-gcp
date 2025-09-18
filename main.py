@@ -590,19 +590,16 @@ def phill_chatbot(request: Request):
         user_context = get_user_context(from_number)
         print(f"Contexto del usuario: {user_context}")
         
-        # Usar LLM para decidir el flujo
+        # Usar LLM para decidir el flujo (enfoque simplificado)
         decision = llm_decision_layer.analyze_user_intent(incoming_msg, user_context)
         print(f"Decisión LLM: {decision}")
         
-        if decision['decision'] == 'PROCESO_AUTOMATIZADO':
-            print("=== FLUJO: PROCESO AUTOMATIZADO ===")
+        if decision['tipo'] == 'tarea':
+            print("=== FLUJO: TAREA AUTOMATIZADA ===")
             
-            # Si el LLM sugiere un intent específico, usarlo
-            if decision.get('intent_suggestion'):
-                intent_name = decision['intent_suggestion']
-                print(f"Intent sugerido por LLM: {intent_name}")
-            else:
-                # Fallback al procesador local
+            # Usar el intent sugerido por el LLM o detectar localmente
+            intent_name = decision.get('intent')
+            if not intent_name:
                 intent_name, confidence = intent_processor.detect_intent(incoming_msg)
                 print(f"Intent detectado localmente: {intent_name} (confianza: {confidence:.2f})")
                 
@@ -619,11 +616,11 @@ def phill_chatbot(request: Request):
             handler = INTENT_HANDLERS.get(intent_name, handle_default)
             respuesta_bot = handler(entities, from_number, incoming_msg)
             
-        else:  # CONVERSACION_ASESOR
-            print("=== FLUJO: CONVERSACIÓN CON ASESOR ===")
+        else:  # charla
+            print("=== FLUJO: CHARLA CON ASESOR ===")
             
-            # Generar respuesta usando el LLM como asesor financiero
-            respuesta_bot = llm_decision_layer.get_advisor_response(incoming_msg, user_context)
+            # Usar la respuesta generada por el LLM
+            respuesta_bot = decision.get('respuesta', llm_decision_layer.get_random_saludo())
             print(f"Respuesta del asesor LLM: {respuesta_bot}")
         
         # Validar que tenemos una respuesta válida

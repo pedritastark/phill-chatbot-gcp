@@ -336,31 +336,36 @@ def process_message(message, debug_mode=False):
             'mes_actual': datetime.now().strftime('%B %Y')
         }
         
-        # Usar LLM para decidir el flujo
+        # Usar LLM para decidir el flujo (enfoque simplificado)
         decision = llm_decision_layer.analyze_user_intent(message, user_context)
         
         # Actualizar estadísticas
         st.session_state.message_count += 1
-        st.session_state.intents_detected.add(decision['decision'])
+        st.session_state.intents_detected.add(decision['tipo'])
         
         # Generar respuesta según la decisión del LLM
-        if decision['decision'] == 'PROCESO_AUTOMATIZADO':
+        if decision['tipo'] == 'tarea':
             # Usar el sistema de intents local
-            intent, confidence = intent_processor.detect_intent(message)
+            intent = decision.get('intent')
+            if not intent:
+                intent, confidence = intent_processor.detect_intent(message)
+            else:
+                confidence = 0.9  # Alta confianza si viene del LLM
+            
             entities = intent_processor.extract_entities(message, intent)
             response = generate_response(intent, entities, message, debug_mode, confidence)
         else:
-            # Usar el LLM como asesor financiero
-            response = llm_decision_layer.get_advisor_response(message, user_context)
+            # Usar la respuesta generada por el LLM
+            response = decision.get('respuesta', llm_decision_layer.get_random_saludo())
         
         # Agregar información de debug si está habilitado
         if debug_mode:
             debug_info = f"""
             <div class="debug-info">
                 <strong>🔍 DEBUG LLM</strong><br>
-                <strong>Decisión:</strong> {decision['decision']}<br>
-                <strong>Confianza:</strong> {decision['confidence']:.2f}<br>
-                <strong>Razonamiento:</strong> {decision['reasoning']}
+                <strong>Tipo:</strong> {decision['tipo']}<br>
+                <strong>Intent:</strong> {decision.get('intent', 'N/A')}<br>
+                <strong>Respuesta LLM:</strong> {decision.get('respuesta', 'N/A')[:100]}...
             </div>
             """
             response += debug_info

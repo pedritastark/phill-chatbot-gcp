@@ -27,50 +27,48 @@ class LLMDecisionLayer:
         # Cargar frases de saludo desde configuración externa
         self.saludos = get_saludos_activos()
         
-        # Configuración del sistema
+        # Configuración del sistema simplificada
         self.system_prompt = """
-Eres un asistente financiero inteligente que decide cómo responder a los usuarios.
+Eres Phill, un asesor financiero personal experto y amigable. Tu personalidad es:
+- Cercano y colombiano (usa expresiones como "parcero", "¡Esoooo!", "¡Dale!")
+- Conocedor de finanzas personales
+- Práctico y directo en tus consejos
+- Motivador y positivo
+- Usas emojis apropiadamente
 
-Tu tarea es analizar el mensaje del usuario y determinar si debe ser procesado por:
-1. PROCESO_AUTOMATIZADO: Para tareas específicas como registrar gastos, ingresos, consultar balance, etc.
-2. CONVERSACION_ASESOR: Para consultas complejas, consejos personalizados, o conversaciones generales
+Tu tarea es analizar el mensaje del usuario y determinar si es una "tarea" o una "charla":
 
-PROCESOS AUTOMATIZADOS (usa PROCESO_AUTOMATIZADO):
+TAREAS (usa "tarea"):
 - Registrar gastos específicos: "Gasté $50,000 en comida", "Compré sandalias por $80,000"
 - Registrar ingresos: "Recibí $1,000,000 de salario"
 - Consultar balance: "¿Cuánto tengo?"
 - Ver resumen: "Muéstrame mis gastos del mes"
 - Crear recordatorios: "Recuérdame pagar el 15"
-- Solicitar tips básicos: "Dame un consejo financiero"
 
-CONVERSACIÓN CON ASESOR (usa CONVERSACION_ASESOR):
+CHARLAS (usa "charla"):
+- Conversaciones generales: "Hola", "¿Cómo estás?", "Las finanzas no se me dan"
 - Consultas complejas: "¿Cómo puedo mejorar mis finanzas?"
-- Análisis personalizado: "¿Qué me recomiendas para ahorrar?"
-- Conversaciones generales: "Hola, ¿cómo estás?"
-- Preguntas sobre inversiones: "¿Dónde debería invertir mi dinero?"
+- Consejos personalizados: "¿Qué me recomiendas para ahorrar?"
 - Planificación financiera: "¿Cómo hago un presupuesto?"
-- Dudas conceptuales: "¿Qué es el interés compuesto?"
-- Preguntas sobre categorización: "¿En qué categoría pongo las sandalias?"
 
 Responde SOLO con un JSON que contenga:
 {
-    "decision": "PROCESO_AUTOMATIZADO" o "CONVERSACION_ASESOR",
-    "confidence": 0.0-1.0,
-    "reasoning": "explicación breve de por qué tomaste esta decisión",
-    "intent_suggestion": "intent específico si es PROCESO_AUTOMATIZADO, null si es CONVERSACION_ASESOR"
+    "tipo": "tarea" o "charla",
+    "respuesta": "Si es charla, escribe tu respuesta como Phill. Si es tarea, escribe null",
+    "intent": "Si es tarea, escribe el intent (registrar_gasto, registrar_ingreso, etc.). Si es charla, escribe null"
 }
 """
 
     def analyze_user_intent(self, message: str, user_context: Optional[Dict] = None) -> Dict:
         """
-        Analiza la intención del usuario y decide el flujo apropiado.
+        Analiza la intención del usuario usando Gemini y devuelve la decisión.
         
         Args:
             message: Mensaje del usuario
             user_context: Contexto adicional del usuario (historial, preferencias, etc.)
             
         Returns:
-            Diccionario con la decisión y metadatos
+            Diccionario con la decisión y respuesta
         """
         try:
             # Construir el prompt con contexto
@@ -84,7 +82,7 @@ Responde SOLO con un JSON que contenga:
 Mensaje del usuario: "{message}"
 {context_info}
 
-Analiza este mensaje y decide el flujo apropiado.
+Analiza este mensaje y responde con el JSON.
 """
             
             # Generar respuesta con Gemini
@@ -95,16 +93,13 @@ Analiza este mensaje y decide el flujo apropiado.
                 decision_data = json.loads(response.text.strip())
                 
                 # Validar estructura
-                required_fields = ['decision', 'confidence', 'reasoning']
+                required_fields = ['tipo', 'respuesta', 'intent']
                 if not all(field in decision_data for field in required_fields):
                     raise ValueError("Respuesta JSON incompleta")
                 
                 # Validar valores
-                if decision_data['decision'] not in ['PROCESO_AUTOMATIZADO', 'CONVERSACION_ASESOR']:
-                    raise ValueError("Decisión inválida")
-                
-                if not 0.0 <= decision_data['confidence'] <= 1.0:
-                    raise ValueError("Confianza fuera de rango")
+                if decision_data['tipo'] not in ['tarea', 'charla']:
+                    raise ValueError("Tipo inválido")
                 
                 return decision_data
                 
@@ -144,17 +139,15 @@ Analiza este mensaje y decide el flujo apropiado.
         
         if automated_score > advisor_score:
             return {
-                "decision": "PROCESO_AUTOMATIZADO",
-                "confidence": 0.7,
-                "reasoning": "Análisis de fallback: detectadas palabras clave de proceso automatizado",
-                "intent_suggestion": None
+                "tipo": "tarea",
+                "respuesta": None,
+                "intent": "registrar_gasto"  # Intent por defecto
             }
         else:
             return {
-                "decision": "CONVERSACION_ASESOR",
-                "confidence": 0.6,
-                "reasoning": "Análisis de fallback: detectadas palabras clave de conversación",
-                "intent_suggestion": None
+                "tipo": "charla",
+                "respuesta": self.get_random_saludo(),
+                "intent": None
             }
     
     def get_advisor_response(self, message: str, user_context: Optional[Dict] = None) -> str:
