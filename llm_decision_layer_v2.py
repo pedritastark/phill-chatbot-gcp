@@ -9,7 +9,7 @@ import os
 import json
 import random
 from typing import Dict, Optional
-from conversation_engine import conversation_engine
+from llm_conversation_engine import llm_conversation_engine
 from saludos_config import get_saludos_activos
 
 class LLMDecisionLayer:
@@ -24,32 +24,30 @@ class LLMDecisionLayer:
         # Cargar saludos
         self.saludos = get_saludos_activos()
 
-    def analyze_user_intent(self, message: str, user_context: Optional[Dict] = None) -> Dict:
+    def analyze_user_intent(self, message: str, user_context: Optional[Dict] = None, conversation_history: Optional[list] = None) -> Dict:
         """
-        Analiza la intención del usuario usando el motor de conversación inteligente.
+        Analiza la intención del usuario usando el motor de conversación LLM.
         
         Args:
             message: Mensaje del usuario
             user_context: Contexto adicional del usuario (historial, preferencias, etc.)
+            conversation_history: Historial de la conversación
             
         Returns:
             Diccionario con la decisión y respuesta
         """
         try:
-            # Usar el motor de conversación inteligente
-            decision = conversation_engine.get_conversation_flow(message, user_context)
-            
-            # Agregar metadatos
-            decision.update({
-                "confianza": 0.95,
-                "razonamiento": "Motor de conversación inteligente",
-                "contexto": conversation_engine.detect_conversation_context(message)
-            })
+            # Usar el motor de conversación LLM
+            decision = llm_conversation_engine.analyze_and_respond(
+                message, 
+                conversation_history, 
+                user_context
+            )
             
             return decision
             
         except Exception as e:
-            print(f"Error en motor de conversación: {e}")
+            print(f"Error en motor de conversación LLM: {e}")
             return self._fallback_analysis(message)
 
     def _fallback_analysis(self, message: str) -> Dict:

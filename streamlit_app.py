@@ -336,8 +336,17 @@ def process_message(message, debug_mode=False):
             'mes_actual': datetime.now().strftime('%B %Y')
         }
         
-        # Usar LLM para decidir el flujo (enfoque simplificado)
-        decision = llm_decision_layer.analyze_user_intent(message, user_context)
+        # Preparar historial de conversación
+        conversation_history = []
+        for msg in st.session_state.messages[-10:]:  # Últimos 10 mensajes
+            if msg['type'] == 'user':
+                conversation_history.append({'user': msg['content'], 'bot': ''})
+            elif msg['type'] == 'bot':
+                if conversation_history:
+                    conversation_history[-1]['bot'] = msg['content']
+        
+        # Usar LLM para decidir el flujo con historial
+        decision = llm_decision_layer.analyze_user_intent(message, user_context, conversation_history)
         
         # Actualizar estadísticas
         st.session_state.message_count += 1
