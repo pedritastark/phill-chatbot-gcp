@@ -458,14 +458,18 @@ def handle_analisis_detallado(entities, from_number, original_message=""):
 
 def handle_default(entities, from_number, original_message=""):
     """Maneja las respuestas por defecto cuando no se detecta una intención específica."""
-    return ("¡Hola! Soy tu asistente financiero personal. Puedo ayudarte con:\n\n"
-            "💰 Registrar gastos\n"
-            "📈 Registrar ingresos\n"
-            "📊 Ver resumen de gastos\n"
-            "⚖️ Consultar balance\n"
-            "💡 Consejos financieros\n"
-            "📅 Crear recordatorios\n\n"
-            "¿En qué te puedo ayudar hoy?")
+    # Usar saludo personalizado del LLM
+    saludo = llm_decision_layer.get_random_saludo()
+    
+    return f"{saludo}\n\n" + (
+        "Puedo ayudarte con:\n\n"
+        "💰 Registrar gastos\n"
+        "📈 Registrar ingresos\n"
+        "📊 Ver resumen de gastos\n"
+        "⚖️ Consultar balance\n"
+        "💡 Consejos financieros\n"
+        "📅 Crear recordatorios"
+    )
 
 
 def get_user_context(from_number):
@@ -563,7 +567,8 @@ def phill_chatbot(request: Request):
 
     # Validaciones básicas
     if not incoming_msg:
-        response.message("Hola! Envíame un mensaje para poder ayudarte con tus finanzas.")
+        saludo_inicial = llm_decision_layer.get_random_saludo()
+        response.message(saludo_inicial)
         return response.to_xml()
     
     if not from_number:

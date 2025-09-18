@@ -10,6 +10,7 @@ import json
 import google.generativeai as genai
 from typing import Dict, Tuple, Optional
 from datetime import datetime
+from saludos_config import get_saludos_activos
 
 class LLMDecisionLayer:
     """Capa de decisión que usa Google AI Studio (Gemini) para determinar el flujo del chatbot."""
@@ -22,6 +23,9 @@ class LLMDecisionLayer:
         
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-pro')
+        
+        # Cargar frases de saludo desde configuración externa
+        self.saludos = get_saludos_activos()
         
         # Configuración del sistema
         self.system_prompt = """
@@ -183,7 +187,12 @@ Si el usuario pregunta algo muy específico sobre sus datos, puedes sugerirle us
             
         except Exception as e:
             print(f"Error generando respuesta de asesor: {e}")
-            return "¡Hola parcero! Soy Phill, tu asesor financiero. ¿En qué te puedo ayudar hoy? 💰"
+            return self.get_random_saludo()
+    
+    def get_random_saludo(self):
+        """Retorna un saludo aleatorio de la lista de saludos personalizados."""
+        import random
+        return random.choice(self.saludos)
 
 # Instancia global
 llm_decision_layer = LLMDecisionLayer()
