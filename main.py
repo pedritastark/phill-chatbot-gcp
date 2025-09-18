@@ -54,9 +54,13 @@ def handle_registrar_gasto(entities, from_number, original_message=""):
         for gasto in query.stream():
             total_categoria += gasto.to_dict().get('monto', 0)
             
-        return f"Hecho. Tu gasto de ${monto:,} en {categoria} ha sido guardado. Con este, ya sumas ${total_categoria:,} en esta categoría durante el mes."
+        return f"✅ **Gasto registrado**: ${monto:,} en {categoria}\n\nCon este gasto, ya sumas ${total_categoria:,} en esta categoría durante el mes."
     else:
-        return f"No pude entender el monto del gasto. Inténtalo de nuevo con un número válido, por ejemplo: 'Gasté $50,000 en comida'."
+        # Si no hay monto, usar el LLM para generar una respuesta más inteligente
+        return llm_decision_layer.get_advisor_response(
+            f"El usuario quiere registrar un gasto en {categoria} pero no especificó el monto. Ayúdale a completar el registro.",
+            {'categoria': categoria, 'tipo_consulta': 'gasto_sin_monto'}
+        )
 
 
 def handle_registrar_ingreso(entities, from_number, original_message=""):

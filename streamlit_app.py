@@ -390,17 +390,21 @@ def generate_response(intent, entities, message, debug_mode=False, confidence=0.
         response += f"Entities: {entities}\n\n"
     
     if intent == 'registrar_gasto':
-        monto = entities.get('monto', 'No especificado')
+        monto = entities.get('monto', None)
         categoria = entities.get('categoria', 'No especificada')
         
-        if isinstance(monto, int):
+        if monto and isinstance(monto, int) and monto > 0:
             response += f"✅ **Gasto registrado**: ${monto:,} en {categoria}\n\n"
+            
+            # Consejo si es gasto alto
+            if monto > 100000:
+                response += "💡 **Consejo**: Ese es un gasto considerable. ¿Has considerado alternativas más económicas?"
         else:
-            response += f"✅ **Gasto registrado**: {monto} en {categoria}\n\n"
-        
-        # Consejo si es gasto alto
-        if isinstance(monto, int) and monto > 100000:
-            response += "💡 **Consejo**: Ese es un gasto considerable. ¿Has considerado alternativas más económicas?"
+            # Si no hay monto, usar el LLM para generar una respuesta más inteligente
+            response = llm_decision_layer.get_advisor_response(
+                f"El usuario quiere registrar un gasto en {categoria} pero no especificó el monto. Ayúdale a completar el registro.",
+                {'categoria': categoria, 'tipo_consulta': 'gasto_sin_monto'}
+            )
             
     elif intent == 'registrar_ingreso':
         monto = entities.get('monto', 'No especificado')
