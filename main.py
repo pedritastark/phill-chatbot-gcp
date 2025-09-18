@@ -6,6 +6,7 @@ from flask import Request
 from twilio.twiml.messaging_response import MessagingResponse
 from google.cloud import firestore
 from intent_processor import intent_processor
+from llm_decision_layer import llm_decision_layer
 
 # --- CONFIGURACIÓN INICIAL ---
 PROJECT_ID = os.environ.get('PROJECT_ID')
@@ -467,6 +468,68 @@ def handle_default(entities, from_number, original_message=""):
             "¿En qué te puedo ayudar hoy?")
 
 
+def get_user_context(from_number):
+    """Obtiene el contexto financiero del usuario para el LLM."""
+    try:
+        now = datetime.now()
+        start_of_month = datetime(now.year, now.month, 1)
+        
+        # Obtener gastos del mes
+        gastos_ref = DB.collection('gastos')
+        gastos_query = (gastos_ref
+                       .where('usuario_whatsapp', '==', from_number)
+                       .where('fecha_registro', '>=', start_of_month))
+        
+        gastos_data = []
+        total_gastos = 0
+        for gasto in gastos_query.stream():
+            data = gasto.to_dict()
+            gastos_data.append(data)
+            total_gastos += data.get('monto', 0)
+        
+        # Obtener ingresos del mes
+        ingresos_ref = DB.collection('ingresos')
+        ingresos_query = (ingresos_ref
+                         .where('usuario_whatsapp', '==', from_number)
+                         .where('fecha_registro', '>=', start_of_month))
+        
+        ingresos_data = []
+        total_ingresos = 0
+        for ingreso in ingresos_query.stream():
+            data = ingreso.to_dict()
+            ingresos_data.append(data)
+            total_ingresos += data.get('monto', 0)
+        
+        # Calcular balance
+        balance = total_ingresos - total_gastos
+        
+        # Categorías más usadas
+        categorias = {}
+        for gasto in gastos_data:
+            cat = gasto.get('categoria', 'Otros')
+            categorias[cat] = categorias.get(cat, 0) + gasto.get('monto', 0)
+        
+        return {
+            'total_gastos_mes': total_gastos,
+            'total_ingresos_mes': total_ingresos,
+            'balance_mes': balance,
+            'categorias_gastos': categorias,
+            'num_transacciones': len(gastos_data) + len(ingresos_data),
+            'mes_actual': now.strftime('%B %Y')
+        }
+        
+    except Exception as e:
+        print(f"Error obteniendo contexto del usuario: {e}")
+        return {
+            'total_gastos_mes': 0,
+            'total_ingresos_mes': 0,
+            'balance_mes': 0,
+            'categorias_gastos': {},
+            'num_transacciones': 0,
+            'mes_actual': datetime.now().strftime('%B %Y')
+        }
+
+
 # --- FUNCIÓN PRINCIPAL Y ENRUTADOR ---
 
 # Diccionario que mapea nombres de intenciones a funciones manejadoras
@@ -511,26 +574,48 @@ def phill_chatbot(request: Request):
     print(f"Mensaje recibido de {from_number}: '{incoming_msg}'")
 
     try:
-        # Usar nuestro sistema de procesamiento local (SIN Dialogflow)
-        print("=== PROCESAMIENTO LOCAL (SIN DIALOGFLOW) ===")
+        # NUEVA ARQUITECTURA CON LLM DECISION LAYER
+        print("=== PROCESAMIENTO CON LLM DECISION LAYER ===")
         
-        # Detectar intención usando nuestro procesador
-        intent_name, confidence = intent_processor.detect_intent(incoming_msg)
-        print(f"Intención detectada: {intent_name} (confianza: {confidence:.2f})")
+        # Obtener contexto del usuario
+        user_context = get_user_context(from_number)
+        print(f"Contexto del usuario: {user_context}")
         
-        # Extraer entidades
-        entities = intent_processor.extract_entities(incoming_msg, intent_name)
-        print(f"Entidades extraídas: {entities}")
-        print("=============================================")
+        # Usar LLM para decidir el flujo
+        decision = llm_decision_layer.analyze_user_intent(incoming_msg, user_context)
+        print(f"Decisión LLM: {decision}")
         
-        # Si la confianza es muy baja, usar respuesta por defecto
-        if confidence < 0.3:
-            print(f"Confianza baja ({confidence:.2f}), usando respuesta por defecto")
-            intent_name = 'default'
-        
-        # Usar el diccionario para encontrar la función correcta a ejecutar
-        handler = INTENT_HANDLERS.get(intent_name, handle_default)
-        respuesta_bot = handler(entities, from_number, incoming_msg)
+        if decision['decision'] == 'PROCESO_AUTOMATIZADO':
+            print("=== FLUJO: PROCESO AUTOMATIZADO ===")
+            
+            # Si el LLM sugiere un intent específico, usarlo
+            if decision.get('intent_suggestion'):
+                intent_name = decision['intent_suggestion']
+                print(f"Intent sugerido por LLM: {intent_name}")
+            else:
+                # Fallback al procesador local
+                intent_name, confidence = intent_processor.detect_intent(incoming_msg)
+                print(f"Intent detectado localmente: {intent_name} (confianza: {confidence:.2f})")
+                
+                # Si la confianza es muy baja, usar respuesta por defecto
+                if confidence < 0.3:
+                    print(f"Confianza baja ({confidence:.2f}), usando respuesta por defecto")
+                    intent_name = 'default'
+            
+            # Extraer entidades
+            entities = intent_processor.extract_entities(incoming_msg, intent_name)
+            print(f"Entidades extraídas: {entities}")
+            
+            # Usar el diccionario para encontrar la función correcta a ejecutar
+            handler = INTENT_HANDLERS.get(intent_name, handle_default)
+            respuesta_bot = handler(entities, from_number, incoming_msg)
+            
+        else:  # CONVERSACION_ASESOR
+            print("=== FLUJO: CONVERSACIÓN CON ASESOR ===")
+            
+            # Generar respuesta usando el LLM como asesor financiero
+            respuesta_bot = llm_decision_layer.get_advisor_response(incoming_msg, user_context)
+            print(f"Respuesta del asesor LLM: {respuesta_bot}")
         
         # Validar que tenemos una respuesta válida
         if not respuesta_bot or not respuesta_bot.strip():

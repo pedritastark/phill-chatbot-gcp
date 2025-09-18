@@ -9,6 +9,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from intent_processor import intent_processor
+from llm_decision_layer import llm_decision_layer
 
 # Configuración de la página
 st.set_page_config(
@@ -18,39 +19,164 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS personalizado
+# CSS personalizado estilo Facebook
 st.markdown("""
 <style>
     .main-header {
-        font-size: 3rem;
-        color: #1f77b4;
+        font-size: 2.5rem;
+        color: #1877f2;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
+        font-weight: bold;
     }
-    .chat-message {
-        padding: 1rem;
+    
+    /* Contenedor principal del chat */
+    .chat-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f0f2f5;
         border-radius: 10px;
-        margin: 1rem 0;
-        border-left: 4px solid #1f77b4;
+        min-height: 500px;
     }
+    
+    /* Mensajes del usuario (azules, lado derecho) */
     .user-message {
-        background-color: #e3f2fd;
-        border-left-color: #2196f3;
+        background-color: #1877f2;
+        color: white;
+        padding: 12px 16px;
+        border-radius: 18px 18px 4px 18px;
+        margin: 8px 0 8px auto;
+        max-width: 70%;
+        word-wrap: break-word;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
     }
+    
+    /* Mensajes del bot (blancos, lado izquierdo) */
     .bot-message {
-        background-color: #f3e5f5;
-        border-left-color: #9c27b0;
+        background-color: white;
+        color: #1c1e21;
+        padding: 12px 16px;
+        border-radius: 18px 18px 18px 4px;
+        margin: 8px auto 8px 0;
+        max-width: 70%;
+        word-wrap: break-word;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        border: 1px solid #e4e6ea;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
     }
+    
+    /* Timestamp */
+    .message-time {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 4px;
+    }
+    
+    .user-message .message-time {
+        color: rgba(255,255,255,0.8);
+    }
+    
+    .bot-message .message-time {
+        color: #65676b;
+    }
+    
+    /* Debug info */
+    .debug-info {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 8px;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    
+    /* Input area */
+    .stTextInput > div > div > input {
+        border-radius: 20px;
+        border: 1px solid #e4e6ea;
+        padding: 12px 16px;
+        font-size: 16px;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #1877f2;
+        box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
+    }
+    
+    /* Botón de envío */
     .stButton > button {
-        width: 100%;
-        background-color: #1f77b4;
+        background-color: #1877f2;
         color: white;
         border: none;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: background-color 0.2s;
     }
+    
     .stButton > button:hover {
-        background-color: #1565c0;
+        background-color: #166fe5;
+    }
+    
+    /* Sidebar */
+    .css-1d391kg {
+        background-color: #f0f2f5;
+    }
+    
+    /* Checkbox debug */
+    .stCheckbox > label > div {
+        background-color: #1877f2;
+    }
+    
+    /* Scrollbar personalizada */
+    .chat-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .chat-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+    
+    .chat-container::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 3px;
+    }
+    
+    .chat-container::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+    
+    /* Animación de mensajes */
+    .user-message, .bot-message {
+        animation: slideIn 0.3s ease-out;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .user-message, .bot-message {
+            max-width: 85%;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -63,35 +189,60 @@ def main():
     
     # Sidebar con información
     with st.sidebar:
-        st.header("📊 Información del Bot")
-        st.info("""
-        **Phill** es tu asistente financiero personal que puede:
+        st.markdown("### 🤖 Phill - Chatbot Financiero")
+        st.markdown("---")
         
-        💰 Registrar gastos e ingresos
-        📊 Mostrar resúmenes financieros
-        💡 Dar consejos financieros
-        ⏰ Crear recordatorios
-        📈 Hacer análisis detallados
+        st.markdown("**🧠 Con IA Avanzada**")
+        st.info("""
+        **Phill** ahora usa Google AI Studio (Gemini) para:
+        
+        🤖 **Procesos Automatizados:**
+        • Registrar gastos e ingresos
+        • Mostrar resúmenes financieros
+        • Crear recordatorios
+        • Hacer análisis detallados
+        
+        🧠 **Conversación Inteligente:**
+        • Consejos personalizados
+        • Planificación financiera
+        • Educación financiera
+        • Consultas complejas
         """)
         
-        st.header("🎯 Intents Soportados")
-        intents = [
-            "registrar_gasto",
-            "registrar_ingreso", 
-            "solicitar_resumen",
-            "consultar_balance",
-            "solicitar_tip",
-            "crear_recordatorio",
-            "analisis_detallado"
-        ]
-        for intent in intents:
-            st.write(f"• {intent}")
+        st.markdown("---")
+        st.markdown("**🎯 Funcionalidades**")
         
-        st.header("📊 Estadísticas")
+        with st.expander("📋 Comandos Automatizados"):
+            intents = [
+                "💰 registrar_gasto",
+                "📈 registrar_ingreso", 
+                "📊 solicitar_resumen",
+                "⚖️ consultar_balance",
+                "💡 solicitar_tip",
+                "⏰ crear_recordatorio",
+                "📈 analisis_detallado"
+            ]
+            for intent in intents:
+                st.write(f"• {intent}")
+        
+        with st.expander("💬 Conversación Natural"):
+            st.write("• Preguntas abiertas")
+            st.write("• Consejos personalizados")
+            st.write("• Planificación financiera")
+            st.write("• Educación financiera")
+        
+        st.markdown("---")
+        st.markdown("**📊 Estadísticas de Sesión**")
         if 'message_count' in st.session_state:
-            st.metric("Mensajes procesados", st.session_state.message_count)
+            st.metric("💬 Mensajes", st.session_state.message_count)
         if 'intents_detected' in st.session_state:
-            st.metric("Intents detectados", len(st.session_state.intents_detected))
+            st.metric("🎯 Decisiones LLM", len(st.session_state.intents_detected))
+        
+        st.markdown("---")
+        st.markdown("**⚙️ Configuración**")
+        st.markdown("• **Debug**: Ver decisiones del LLM")
+        st.markdown("• **IA**: Google AI Studio (Gemini)")
+        st.markdown("• **Costo**: ~$0.001-0.006 por mensaje")
     
     # Inicializar session state
     if 'messages' not in st.session_state:
@@ -100,52 +251,73 @@ def main():
         st.session_state.intents_detected = set()
         st.session_state.debug_mode = False
     
+    # Contenedor del chat estilo Facebook
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    
     # Mostrar mensajes anteriores
     for message in st.session_state.messages:
-        with st.container():
-            if message['type'] == 'user':
-                st.markdown(f"""
-                <div class="chat-message user-message">
-                    <strong>👤 Tú:</strong> {message['content']}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="chat-message bot-message">
-                    <strong>🤖 Phill:</strong> {message['content']}
-                </div>
-                """, unsafe_allow_html=True)
+        timestamp = message['timestamp'].strftime("%H:%M")
+        
+        if message['type'] == 'user':
+            st.markdown(f"""
+            <div class="user-message">
+                <div>{message['content']}</div>
+                <div class="message-time">{timestamp}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="bot-message">
+                <div>{message['content']}</div>
+                <div class="message-time">{timestamp}</div>
+            </div>
+            """, unsafe_allow_html=True)
     
-    # Input del usuario
-    col1, col2 = st.columns([4, 1])
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    with col1:
+    # Área de input estilo Facebook
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([1, 4, 1])
+    
+    with col2:
         # Inicializar user_input en session_state si no existe
         if 'user_input' not in st.session_state:
             st.session_state.user_input = ""
         
         user_input = st.text_input(
-            "Escribe tu mensaje aquí:",
-            placeholder="Ej: Gasté $50,000 en comida",
+            "",
+            placeholder="Escribe un mensaje...",
             value=st.session_state.user_input,
-            key="user_input_widget"
+            key="user_input_widget",
+            label_visibility="collapsed"
         )
     
-    with col2:
-        debug_toggle = st.checkbox("Debug", value=st.session_state.debug_mode)
+    # Botón de envío y debug
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col1:
+        debug_toggle = st.checkbox("🔍 Debug", value=st.session_state.debug_mode)
         st.session_state.debug_mode = debug_toggle
     
-    # Botón para enviar
-    if st.button("Enviar", type="primary"):
-        if user_input and user_input.strip():
-            # Procesar mensaje
-            process_message(user_input.strip(), st.session_state.debug_mode)
-            # Limpiar el input después de procesar
-            st.session_state.user_input = ""
+    with col2:
+        if st.button("📤 Enviar", type="primary"):
+            if user_input and user_input.strip():
+                # Procesar mensaje
+                process_message(user_input.strip(), st.session_state.debug_mode)
+                # Limpiar el input después de procesar
+                st.session_state.user_input = ""
+                st.rerun()
+    
+    with col3:
+        if st.button("🗑️ Limpiar"):
+            st.session_state.messages = []
+            st.session_state.message_count = 0
+            st.session_state.intents_detected = set()
             st.rerun()
 
 def process_message(message, debug_mode=False):
-    """Procesa el mensaje del usuario."""
+    """Procesa el mensaje del usuario usando la nueva arquitectura LLM."""
     try:
         # Agregar mensaje del usuario
         st.session_state.messages.append({
@@ -154,16 +326,44 @@ def process_message(message, debug_mode=False):
             'timestamp': datetime.now()
         })
         
-        # Detectar intent
-        intent, confidence = intent_processor.detect_intent(message)
-        entities = intent_processor.extract_entities(message, intent)
+        # Simular contexto del usuario (en la app real vendría de Firestore)
+        user_context = {
+            'total_gastos_mes': 0,
+            'total_ingresos_mes': 0,
+            'balance_mes': 0,
+            'categorias_gastos': {},
+            'num_transacciones': 0,
+            'mes_actual': datetime.now().strftime('%B %Y')
+        }
+        
+        # Usar LLM para decidir el flujo
+        decision = llm_decision_layer.analyze_user_intent(message, user_context)
         
         # Actualizar estadísticas
         st.session_state.message_count += 1
-        st.session_state.intents_detected.add(intent)
+        st.session_state.intents_detected.add(decision['decision'])
         
-        # Generar respuesta
-        response = generate_response(intent, entities, message, debug_mode, confidence)
+        # Generar respuesta según la decisión del LLM
+        if decision['decision'] == 'PROCESO_AUTOMATIZADO':
+            # Usar el sistema de intents local
+            intent, confidence = intent_processor.detect_intent(message)
+            entities = intent_processor.extract_entities(message, intent)
+            response = generate_response(intent, entities, message, debug_mode, confidence)
+        else:
+            # Usar el LLM como asesor financiero
+            response = llm_decision_layer.get_advisor_response(message, user_context)
+        
+        # Agregar información de debug si está habilitado
+        if debug_mode:
+            debug_info = f"""
+            <div class="debug-info">
+                <strong>🔍 DEBUG LLM</strong><br>
+                <strong>Decisión:</strong> {decision['decision']}<br>
+                <strong>Confianza:</strong> {decision['confidence']:.2f}<br>
+                <strong>Razonamiento:</strong> {decision['reasoning']}
+            </div>
+            """
+            response += debug_info
         
         # Agregar respuesta del bot
         st.session_state.messages.append({

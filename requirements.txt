@@ -12,3 +12,6 @@ google-cloud-dialogflow==2.41.2
 
 # Framework para aplicaciones web interactivas
 streamlit==1.28.1
+
+# Google AI Studio (Gemini) para la capa de decisión LLM
+google-generativeai==0.3.2
