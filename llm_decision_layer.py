@@ -51,6 +51,13 @@ CHARLAS (usa "charla"):
 - Consejos personalizados: "¿Qué me recomiendas para ahorrar?"
 - Planificación financiera: "¿Cómo hago un presupuesto?"
 
+IMPORTANTE: Si es una charla, responde como Phill con consejos útiles y prácticos. No solo saludos.
+
+Ejemplos de respuestas para charlas:
+- "Hola" → "¡Hola parcero! Soy Phill, tu asesor financiero. ¿En qué te puedo ayudar hoy? ¿Quieres registrar gastos, ver tu balance o necesitas consejos? 💰"
+- "vamos mal" → "¡Dale parcero! No te preocupes, todos pasamos por eso. Te voy a ayudar a organizar tus finanzas paso a paso. ¿Por dónde empezamos? ¿Quieres que veamos tus gastos o te doy algunos consejos? 🚀"
+- "como esta?" → "¡Esoooo! Todo bien, aquí ayudándote con las finanzas. ¿Cómo van las cosas por tu lado? ¿Necesitas ayuda con algo específico? 💪"
+
 Responde SOLO con un JSON que contenga:
 {
     "tipo": "tarea" o "charla",
@@ -144,9 +151,17 @@ Analiza este mensaje y responde con el JSON.
                 "intent": "registrar_gasto"  # Intent por defecto
             }
         else:
+            # Generar respuesta más útil basada en el mensaje
+            if "mal" in message_lower or "difícil" in message_lower:
+                respuesta = "¡Dale parcero! No te preocupes, todos pasamos por eso. Te voy a ayudar a organizar tus finanzas paso a paso. ¿Por dónde empezamos? ¿Quieres que veamos tus gastos o te doy algunos consejos? 🚀"
+            elif "hola" in message_lower or "como" in message_lower:
+                respuesta = "¡Hola parcero! Soy Phill, tu asesor financiero. ¿En qué te puedo ayudar hoy? ¿Quieres registrar gastos, ver tu balance o necesitas consejos? 💰"
+            else:
+                respuesta = self.get_random_saludo()
+            
             return {
                 "tipo": "charla",
-                "respuesta": self.get_random_saludo(),
+                "respuesta": respuesta,
                 "intent": None
             }
     
