@@ -57,6 +57,9 @@ Ejemplos de respuestas para charlas:
 - "Hola" → "¡Hola parcero! Soy Phill, tu asesor financiero. ¿En qué te puedo ayudar hoy? ¿Quieres registrar gastos, ver tu balance o necesitas consejos? 💰"
 - "vamos mal" → "¡Dale parcero! No te preocupes, todos pasamos por eso. Te voy a ayudar a organizar tus finanzas paso a paso. ¿Por dónde empezamos? ¿Quieres que veamos tus gastos o te doy algunos consejos? 🚀"
 - "como esta?" → "¡Esoooo! Todo bien, aquí ayudándote con las finanzas. ¿Cómo van las cosas por tu lado? ¿Necesitas ayuda con algo específico? 💪"
+- "quiero empezar un ahorro" → "¡Esoooo! Excelente decisión parcero. Para empezar a ahorrar, te recomiendo: 1) Define tu meta (¿cuánto quieres ahorrar y para qué?), 2) Calcula cuánto puedes ahorrar mensualmente, 3) Automatiza el ahorro. ¿Ya tienes una meta en mente o quieres que te ayude a calcular cuánto puedes ahorrar? 🎯"
+- "quiero ahorrar" → "¡Dale! Ahorrar es la clave del éxito financiero. Te voy a ayudar a crear un plan. Primero, ¿cuál es tu objetivo? ¿Una emergencia, vacaciones, casa? Y segundo, ¿cuánto ganas mensualmente para calcular cuánto puedes ahorrar? 💰"
+- "necesito consejos financieros" → "¡Perfecto! Te voy a dar consejos prácticos: 1) Gasta menos de lo que ganas, 2) Crea un fondo de emergencia (3-6 meses de gastos), 3) Invierte en tu futuro. ¿En qué área específica necesitas ayuda? ¿Presupuesto, ahorro o inversión? 🚀"
 
 Responde SOLO con un JSON que contenga:
 {
@@ -152,10 +155,14 @@ Analiza este mensaje y responde con el JSON.
             }
         else:
             # Generar respuesta más útil basada en el mensaje
-            if "mal" in message_lower or "difícil" in message_lower:
+            if "ahorro" in message_lower or "ahorrar" in message_lower:
+                respuesta = "¡Esoooo! Excelente decisión parcero. Para empezar a ahorrar, te recomiendo: 1) Define tu meta (¿cuánto quieres ahorrar y para qué?), 2) Calcula cuánto puedes ahorrar mensualmente, 3) Automatiza el ahorro. ¿Ya tienes una meta en mente o quieres que te ayude a calcular cuánto puedes ahorrar? 🎯"
+            elif "mal" in message_lower or "difícil" in message_lower:
                 respuesta = "¡Dale parcero! No te preocupes, todos pasamos por eso. Te voy a ayudar a organizar tus finanzas paso a paso. ¿Por dónde empezamos? ¿Quieres que veamos tus gastos o te doy algunos consejos? 🚀"
             elif "hola" in message_lower or "como" in message_lower:
                 respuesta = "¡Hola parcero! Soy Phill, tu asesor financiero. ¿En qué te puedo ayudar hoy? ¿Quieres registrar gastos, ver tu balance o necesitas consejos? 💰"
+            elif "consejo" in message_lower or "ayuda" in message_lower:
+                respuesta = "¡Perfecto! Te voy a dar consejos prácticos: 1) Gasta menos de lo que ganas, 2) Crea un fondo de emergencia (3-6 meses de gastos), 3) Invierte en tu futuro. ¿En qué área específica necesitas ayuda? ¿Presupuesto, ahorro o inversión? 🚀"
             else:
                 respuesta = self.get_random_saludo()
             
