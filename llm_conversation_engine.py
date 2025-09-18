@@ -170,6 +170,33 @@ Analiza este mensaje y responde apropiadamente. Si es una tarea, responde con JS
                 "confianza": 0.70,
                 "razonamiento": "Fallback: detectado registro de gasto"
             }
+        # Detectar conversaciones sobre ingresos
+        elif any(word in message_lower for word in ["ganar", "dinero", "ingresos", "mejorar", "aumentar"]):
+            return {
+                "tipo": "charla",
+                "respuesta": "¡Esoooo! Me encanta que quieras aumentar tus ingresos, parcero. Es una excelente estrategia para mejorar tu situación financiera. 💰\n\nPara ayudarte mejor, necesito entender tu situación actual: ¿trabajas por cuenta propia o tienes un empleo fijo? ¿Tienes alguna habilidad o pasión que puedas monetizar? También, ¿estás abierto a opciones como freelancing, negocios adicionales, o invertir en tu educación para conseguir un mejor trabajo? 🚀",
+                "intent": None,
+                "confianza": 0.80,
+                "razonamiento": "Fallback: detectada conversación sobre ingresos"
+            }
+        # Detectar conversaciones sobre ahorro
+        elif any(word in message_lower for word in ["ahorro", "ahorrar", "ahorros"]):
+            return {
+                "tipo": "charla",
+                "respuesta": "¡Esoooo! Excelente decisión parcero. Para empezar a ahorrar, te recomiendo: 1) Define tu meta (¿cuánto quieres ahorrar y para qué?), 2) Calcula cuánto puedes ahorrar mensualmente, 3) Automatiza el ahorro. ¿Ya tienes una meta en mente o quieres que te ayude a calcular cuánto puedes ahorrar? 🎯",
+                "intent": None,
+                "confianza": 0.80,
+                "razonamiento": "Fallback: detectada conversación sobre ahorro"
+            }
+        # Detectar conversaciones sobre inversión
+        elif any(word in message_lower for word in ["invertir", "inversión", "inversiones"]):
+            return {
+                "tipo": "charla",
+                "respuesta": "¡Dale! Me encanta que quieras hacer crecer tu dinero. Te ayudo a empezar seguro. 💰 ¿Ya tienes un fondo de emergencia? ¿Y cuál es tu perfil de riesgo: conservador, moderado o agresivo? 💰",
+                "intent": None,
+                "confianza": 0.80,
+                "razonamiento": "Fallback: detectada conversación sobre inversión"
+            }
         else:
             return {
                 "tipo": "charla",
