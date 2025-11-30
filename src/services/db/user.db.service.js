@@ -16,7 +16,7 @@ class UserDBService {
         `SELECT * FROM users WHERE phone_number = $1 AND is_active = true`,
         [phoneNumber]
       );
-      
+
       return result.rows.length > 0 ? result.rows[0] : null;
     } catch (error) {
       Logger.error(`Error al buscar usuario por teléfono: ${phoneNumber}`, error);
@@ -35,7 +35,7 @@ class UserDBService {
         `SELECT * FROM users WHERE user_id = $1 AND is_active = true`,
         [userId]
       );
-      
+
       return result.rows.length > 0 ? result.rows[0] : null;
     } catch (error) {
       Logger.error(`Error al buscar usuario por ID: ${userId}`, error);
@@ -51,16 +51,16 @@ class UserDBService {
   async findOrCreate(userData) {
     try {
       const { phoneNumber, name } = userData;
-      
+
       // Primero intentar encontrar el usuario
       let user = await this.findByPhoneNumber(phoneNumber);
-      
+
       if (user) {
         // Actualizar last_interaction
         await this.updateLastInteraction(user.user_id);
         return user;
       }
-      
+
       // Si no existe, crearlo
       const result = await query(
         `INSERT INTO users (
@@ -76,16 +76,16 @@ class UserDBService {
         RETURNING *`,
         [phoneNumber, name || null, 'es', 'COP', 'America/Bogota']
       );
-      
+
       user = result.rows[0];
       Logger.success(`✅ Nuevo usuario creado: ${phoneNumber}`);
-      
+
       // Crear categorías predeterminadas para el nuevo usuario
       await this.createDefaultCategories(user.user_id);
-      
+
       // Crear cuenta de efectivo predeterminada
       await this.createDefaultAccount(user.user_id);
-      
+
       return user;
     } catch (error) {
       Logger.error('Error al crear o encontrar usuario', error);
@@ -108,6 +108,31 @@ class UserDBService {
       );
     } catch (error) {
       Logger.error('Error al actualizar última interacción', error);
+    }
+  }
+
+  /**
+   * Actualiza campos genéricos de un usuario
+   * @param {string} phoneNumber - Teléfono del usuario
+   * @param {Object} updateData - Datos a actualizar
+   */
+  async updateUser(phoneNumber, updateData) {
+    try {
+      const keys = Object.keys(updateData);
+      if (keys.length === 0) return;
+
+      const setClause = keys.map((key, index) => `${key} = $${index + 2}`).join(', ');
+      const values = [phoneNumber, ...Object.values(updateData)];
+
+      await query(
+        `UPDATE users SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE phone_number = $1`,
+        values
+      );
+
+      Logger.info(`Usuario actualizado: ${phoneNumber} (${keys.join(', ')})`);
+    } catch (error) {
+      Logger.error('Error al actualizar usuario', error);
+      throw error;
     }
   }
 
@@ -222,7 +247,7 @@ class UserDBService {
         `UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1`,
         [userId]
       );
-      
+
       Logger.info(`Usuario desactivado: ${userId}`);
     } catch (error) {
       Logger.error('Error al desactivar usuario', error);
@@ -247,7 +272,7 @@ class UserDBService {
         { name: 'Servicios', type: 'expense', icon: '💡', color: '#6366f1' },
         { name: 'Compras', type: 'expense', icon: '🛍️', color: '#f43f5e' },
         { name: 'Otros Gastos', type: 'expense', icon: '💸', color: '#64748b' },
-        
+
         // Ingresos
         { name: 'Salario', type: 'income', icon: '💰', color: '#10b981' },
         { name: 'Freelance', type: 'income', icon: '💼', color: '#3b82f6' },

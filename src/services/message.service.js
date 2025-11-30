@@ -36,6 +36,27 @@ class MessageService {
       Logger.user(`Procesando mensaje de ${userId}`);
       Logger.info(`Mensaje: "${message}"`);
 
+      // 0. Verificar usuario y onboarding
+      const UserDBService = require('./db/user.db.service');
+      const OnboardingService = require('./onboarding.service');
+
+      let user = await UserDBService.findByPhoneNumber(userId);
+
+      // Si el usuario no existe, crearlo e iniciar onboarding
+      if (!user) {
+        user = await UserDBService.findOrCreate({ phoneNumber: userId });
+        const welcomeMessage = await OnboardingService.startOnboarding(userId);
+        await ConversationService.addAssistantMessage(userId, welcomeMessage);
+        return welcomeMessage;
+      }
+
+      // Si el onboarding no está completo, procesar con OnboardingService
+      if (!user.onboarding_completed) {
+        const onboardingResponse = await OnboardingService.processMessage(userId, message);
+        await ConversationService.addAssistantMessage(userId, onboardingResponse);
+        return onboardingResponse;
+      }
+
       // 1. Detectar si es un comando financiero
       const financialCommand = AIService.detectFinancialCommand(message);
 
