@@ -10,15 +10,15 @@ const config = {
 
   // Twilio
   twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID,
-    authToken: process.env.TWILIO_AUTH_TOKEN,
-    phoneNumber: process.env.TWILIO_PHONE_NUMBER,
+    accountSid: (process.env.TWILIO_ACCOUNT_SID || '').trim().replace(/^['"]|['"]$/g, ''),
+    authToken: (process.env.TWILIO_AUTH_TOKEN || '').trim().replace(/^['"]|['"]$/g, ''),
+    phoneNumber: (process.env.TWILIO_PHONE_NUMBER || '').trim().replace(/^['"]|['"]$/g, ''),
   },
 
   // Google Gemini
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
+    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
   },
 
   // Logs
