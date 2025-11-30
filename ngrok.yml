@@ -1,0 +1,4 @@
+# Configuración de ngrok para evitar la página de advertencia
+version: "2"
+authtoken_from_env: true
+
