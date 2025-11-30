@@ -16,7 +16,7 @@ async function startServer() {
     // Verificar conexión a la base de datos
     Logger.info('Verificando conexión a PostgreSQL...');
     const dbConnected = await testConnection();
-    
+
     if (!dbConnected) {
       Logger.warning('⚠️  No se pudo conectar a PostgreSQL. El bot funcionará en modo JSON.');
     }
@@ -33,15 +33,19 @@ async function startServer() {
       Logger.info(`🤖 Modelo: ${config.gemini.model}`);
       Logger.info(`📍 Webhook: http://localhost:${config.port}/webhook`);
       Logger.info(`💚 Health: http://localhost:${config.port}/health`);
-      
+
       if (dbConnected) {
         const stats = getPoolStats();
         Logger.info(`🗄️  PostgreSQL: ${stats.total} conexiones activas`);
       }
-      
+
       console.log('='.repeat(60) + '\n');
       Logger.info('Esperando mensajes de WhatsApp... 💜');
     });
+
+    // Iniciar el planificador de recordatorios
+    const ReminderScheduler = require('./src/services/reminder.scheduler');
+    ReminderScheduler.start();
 
   } catch (error) {
     Logger.error('Error al iniciar el servidor', error);

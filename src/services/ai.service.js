@@ -72,7 +72,21 @@ class AIService {
    • Ejemplo bueno: "ETF = canasta de acciones 🧺 Ventaja: diversificación instantánea. Compras en bolsa como acciones. 💜"
    • Ejemplo MALO: Explicaciones largas con múltiples párrafos y ejemplos extensos
    
-   ✅ Objetivo: Respuestas útiles, claras, CON 💜 al final, y SIEMPRE bajo 700 caracteres.`;
+   ✅ Objetivo: Respuestas útiles, claras, CON 💜 al final, y SIEMPRE bajo 700 caracteres.
+   
+   11. **📅 GESTIÓN DE RECORDATORIOS:**
+      * Si el usuario pide explícitamente un recordatorio (ej: "recuérdame pagar X mañana", "avísame el viernes para Y"), DEBES responder con un bloque de código JSON.
+      * NO respondas con texto normal en este caso.
+      * Formato requerido:
+        \`\`\`json
+        {
+          "type": "reminder",
+          "message": "Pagar el internet",
+          "datetime": "2023-10-27T15:00:00-05:00"
+        }
+        \`\`\`
+      * "datetime" debe ser una fecha ISO 8601 válida con zona horaria (asume -05:00 si no se especifica).
+      * Usa la fecha y hora actual que se te proporcionará en el contexto para calcular fechas relativas (mañana, el viernes, en 2 horas).`;
   }
 
   /**
@@ -92,17 +106,17 @@ class AIService {
         systemInstruction: this.systemPrompt,
       });
 
-      // Construir el mensaje actual con contexto financiero si existe
-      let currentMessage = userMessage;
-      
+      // Construir el mensaje actual con contexto financiero y fecha
+      let currentMessage = `[Fecha y hora actual: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}]\n\n${userMessage}`;
+
       if (context.financialSummary) {
-        currentMessage = `[Contexto financiero: ${context.financialSummary}]\n\n${userMessage}`;
+        currentMessage = `[Contexto financiero: ${context.financialSummary}]\n\n${currentMessage}`;
       }
 
       // Si hay historial de conversación, usar chat con contexto
       if (context.conversationHistory && context.conversationHistory.length > 0) {
         Logger.info(`📜 Usando historial de ${context.conversationHistory.length} mensajes`);
-        
+
         const chat = model.startChat({
           history: context.conversationHistory,
         });
@@ -120,7 +134,7 @@ class AIService {
       } else {
         // Sin historial, usar generación simple
         Logger.info('📝 Sin historial previo, iniciando nueva conversación');
-        
+
         const result = await model.generateContent(currentMessage);
         const response = await result.response;
         const aiResponse = response.text().trim();

@@ -42,9 +42,9 @@ class MessageService {
       if (financialCommand) {
         // Guardar el mensaje del usuario
         await ConversationService.addUserMessage(userId, message);
-        
+
         const response = await this.handleFinancialCommand(financialCommand, userId);
-        
+
         // Guardar la respuesta del asistente
         await ConversationService.addAssistantMessage(userId, response);
         return response;
@@ -53,14 +53,14 @@ class MessageService {
       // 2. Obtener historial de conversación ANTES de guardar el mensaje actual
       // (últimos 10 mensajes = 5 intercambios anteriores)
       const conversationHistory = ConversationService.getHistoryForGemini(userId);
-      
+
       if (conversationHistory.length > 0) {
         Logger.info(`💬 Contexto: ${conversationHistory.length} mensajes previos`);
       }
 
       // 3. Obtener contexto financiero del usuario
       const summary = await FinanceService.getUserSummary(userId);
-      
+
       let financialContext = null;
       if (summary && summary.transactionCount > 0) {
         financialContext = `El usuario ha registrado ${summary.transactionCount} transacciones en los ${summary.period}. Ingresos totales: $${summary.totalIncome.toFixed(2)}, Gastos totales: $${summary.totalExpenses.toFixed(2)}, Balance: $${summary.balance.toFixed(2)}.`;
@@ -73,7 +73,59 @@ class MessageService {
       });
 
       // 5. AHORA sí, guardar el mensaje del usuario y la respuesta en el historial
+      // 5. AHORA sí, guardar el mensaje del usuario
       await ConversationService.addUserMessage(userId, message);
+
+      // Verificar si la respuesta es un JSON de recordatorio
+      const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
+
+      if (jsonMatch) {
+        try {
+          const command = JSON.parse(jsonMatch[1]);
+
+          if (command.type === 'reminder') {
+            const ReminderDBService = require('./db/reminder.db.service');
+            const UserDBService = require('./db/user.db.service');
+
+            // Obtener UUID del usuario
+            const user = await UserDBService.getUserByPhone(userId);
+
+            if (user) {
+              // Guardar recordatorio
+              await ReminderDBService.createReminder({
+                userId: user.user_id,
+                message: command.message,
+                scheduledAt: command.datetime
+              });
+
+              // Respuesta de confirmación
+              const dateObj = new Date(command.datetime);
+              const dateStr = dateObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+              const timeStr = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
+              const confirmation = `✅ ¡Hecho! Te recordaré "${command.message}" el ${dateStr} a las ${timeStr}. 💜`;
+
+              await ConversationService.addAssistantMessage(userId, confirmation);
+              return confirmation;
+            } else {
+              Logger.error(`Usuario no encontrado para recordatorio: ${userId}`);
+              // If user not found, we can't create the reminder.
+              // Return a generic error or the original AI response (cleaned).
+              const cleanResponse = aiResponse.replace(/```json[\s\S]*```/, '').trim() || 'Entendido, pero tuve un problema técnico procesando el recordatorio porque no pude encontrar tu información de usuario. 💜';
+              await ConversationService.addAssistantMessage(userId, cleanResponse);
+              return cleanResponse;
+            }
+          }
+        } catch (e) {
+          Logger.error('Error al procesar JSON de IA', e);
+          // Si falla, enviar la respuesta original limpia de bloques de código
+          const cleanResponse = aiResponse.replace(/```json[\s\S]*```/, '').trim() || 'Entendido, pero tuve un problema técnico procesando el recordatorio. 💜';
+          await ConversationService.addAssistantMessage(userId, cleanResponse);
+          return cleanResponse;
+        }
+      }
+
+      // Respuesta normal
       await ConversationService.addAssistantMessage(userId, aiResponse);
 
       // 6. Log de advertencia si la respuesta de IA es muy larga
@@ -129,7 +181,7 @@ class MessageService {
       const emoji = type === 'expense' ? '💸' : '💰';
 
       let response = `${emoji} ¡Listo! Registré tu ${typeText} de $${amount.toFixed(2)} en ${category}.\n\n`;
-      
+
       if (summary) {
         response += `📊 Resumen de tus ${summary.period}:\n`;
         response += `• Ingresos: $${summary.totalIncome.toFixed(2)}\n`;
