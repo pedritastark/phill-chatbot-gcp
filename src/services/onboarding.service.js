@@ -82,6 +82,12 @@ class OnboardingService {
         // Separar por comas o saltos de línea
         const accountsRaw = accountsStr.split(/[,;\n]+/).map(a => a.trim()).filter(a => a.length > 0);
 
+        // Validación estricta: Debe haber al menos un número en el mensaje (para el saldo)
+        // Esto evita que saludos como "Buenos días" se interpreten como cuentas
+        if (!/\d/.test(accountsStr)) {
+            return "Hmm, no veo ningún saldo en tu mensaje. 🤔\n\nPor favor escribe el nombre de la cuenta y cuánto dinero tienes.\n\nEjemplo: \"Nequi: 50.000\" o \"Efectivo: 0\"";
+        }
+
         if (accountsRaw.length === 0) {
             return "Necesito al menos una cuenta para comenzar. ¿Qué tal si escribes 'Efectivo: 0'? 😊";
         }
