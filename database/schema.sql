@@ -47,6 +47,10 @@ CREATE TABLE users (
     -- Onboarding
     onboarding_step VARCHAR(50) DEFAULT 'name', -- name, accounts, completed
     onboarding_completed BOOLEAN DEFAULT FALSE,
+
+    -- Estado de Conversación (Multi-turn)
+    current_action VARCHAR(50), -- selecting_account, etc.
+    action_data JSONB, -- Datos temporales de la acción
     
     -- Constraints
     CONSTRAINT chk_financial_literacy CHECK (financial_literacy IN ('beginner', 'intermediate', 'advanced')),

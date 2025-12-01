@@ -15,10 +15,10 @@ const config = {
     phoneNumber: (process.env.TWILIO_PHONE_NUMBER || '').trim().replace(/^['"]|['"]$/g, ''),
   },
 
-  // Google Gemini
-  gemini: {
-    apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest',
+  // OpenAI
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   },
 
   // Logs
@@ -48,7 +48,7 @@ function validateConfig() {
   const requiredVars = [
     'TWILIO_ACCOUNT_SID',
     'TWILIO_AUTH_TOKEN',
-    'GEMINI_API_KEY',
+    'OPENAI_API_KEY',
   ];
 
   const missing = requiredVars.filter(varName => !process.env[varName]);

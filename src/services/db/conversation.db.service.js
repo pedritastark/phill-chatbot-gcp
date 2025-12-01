@@ -143,10 +143,10 @@ class ConversationDBService {
         [userId, limit]
       );
 
-      // Convertir a formato Gemini y revertir orden
+      // Convertir a formato OpenAI y revertir orden
       return result.rows.reverse().map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }],
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: msg.content,
       }));
     } catch (error) {
       Logger.error('Error al obtener mensajes recientes para IA', error);

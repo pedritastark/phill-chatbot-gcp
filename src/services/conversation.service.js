@@ -73,7 +73,7 @@ class ConversationService {
         role: 'assistant',
         content: response,
         tokensUsed: metadata.tokensUsed,
-        modelUsed: metadata.modelUsed || 'gemini-pro',
+        modelUsed: metadata.modelUsed || 'gpt-4o-mini',
         responseTimeMs: metadata.responseTimeMs,
         intent: metadata.intent,
         entities: metadata.entities,
@@ -106,11 +106,11 @@ class ConversationService {
   }
 
   /**
-   * Obtiene el historial en formato para Gemini API
+   * Obtiene el historial en formato para AI
    * @param {string} phoneNumber - Número de teléfono del usuario
-   * @returns {Promise<Array>} - Array de mensajes en formato Gemini
+   * @returns {Promise<Array>} - Array de mensajes
    */
-  getHistoryForGemini(phoneNumber) {
+  getHistoryForAI(phoneNumber) {
     // Convertir el método a async para usar await
     return this.getRecentHistory(phoneNumber, this.maxMessagesPerUser);
   }
@@ -128,7 +128,7 @@ class ConversationService {
       }
 
       const conversations = await ConversationDBService.getUserConversations(user.user_id, true);
-      
+
       for (const conversation of conversations) {
         await ConversationDBService.closeConversation(conversation.conversation_id);
       }
@@ -185,7 +185,7 @@ class ConversationService {
       }
 
       const conversations = await ConversationDBService.getUserConversations(user.user_id, true);
-      
+
       if (conversations.length > 0) {
         await ConversationDBService.closeConversation(conversations[0].conversation_id);
         Logger.info(`Conversación cerrada para ${phoneNumber}`);
@@ -209,7 +209,7 @@ class ConversationService {
         }
         return await ConversationDBService.getStats(user.user_id);
       }
-      
+
       return await ConversationDBService.getStats();
     } catch (error) {
       Logger.error('Error al obtener estadísticas de conversaciones', error);

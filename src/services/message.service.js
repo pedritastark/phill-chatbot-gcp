@@ -57,7 +57,12 @@ class MessageService {
         return onboardingResponse;
       }
 
-      // 1. Detectar si es un comando financiero
+      // 1. Verificar si el usuario está en medio de una acción (ej: seleccionando cuenta)
+      if (user.current_action === 'selecting_account' && user.action_data) {
+        return await this.handleAccountSelection(user, message);
+      }
+
+      // 2. Detectar si es un comando financiero
       const financialCommand = AIService.detectFinancialCommand(message);
 
       if (financialCommand) {
@@ -71,15 +76,15 @@ class MessageService {
         return response;
       }
 
-      // 2. Obtener historial de conversación ANTES de guardar el mensaje actual
+      // 3. Obtener historial de conversación ANTES de guardar el mensaje actual
       // (últimos 10 mensajes = 5 intercambios anteriores)
-      const conversationHistory = ConversationService.getHistoryForGemini(userId);
+      const conversationHistory = await ConversationService.getHistoryForAI(userId);
 
       if (conversationHistory.length > 0) {
         Logger.info(`💬 Contexto: ${conversationHistory.length} mensajes previos`);
       }
 
-      // 3. Obtener contexto financiero del usuario
+      // 4. Obtener contexto financiero del usuario
       const summary = await FinanceService.getUserSummary(userId);
 
       let financialContext = null;
@@ -87,14 +92,13 @@ class MessageService {
         financialContext = `El usuario ha registrado ${summary.transactionCount} transacciones en los ${summary.period}. Ingresos totales: $${summary.totalIncome.toFixed(2)}, Gastos totales: $${summary.totalExpenses.toFixed(2)}, Balance: $${summary.balance.toFixed(2)}.`;
       }
 
-      // 4. Obtener respuesta de la IA con contexto completo
+      // 5. Obtener respuesta de la IA con contexto completo
       const aiResponse = await AIService.getResponse(message, userId, {
         financialSummary: financialContext,
         conversationHistory: conversationHistory,
       });
 
-      // 5. AHORA sí, guardar el mensaje del usuario y la respuesta en el historial
-      // 5. AHORA sí, guardar el mensaje del usuario
+      // 6. AHORA sí, guardar el mensaje del usuario y la respuesta en el historial
       await ConversationService.addUserMessage(userId, message);
 
       // Verificar si la respuesta es un JSON de recordatorio
@@ -149,7 +153,7 @@ class MessageService {
       // Respuesta normal
       await ConversationService.addAssistantMessage(userId, aiResponse);
 
-      // 6. Log de advertencia si la respuesta de IA es muy larga
+      // 7. Log de advertencia si la respuesta de IA es muy larga
       if (aiResponse.length > config.messaging.recommendedLength) {
         Logger.warning(
           `🚨 IA SUPERÓ EL LÍMITE: ${aiResponse.length} caracteres ` +
@@ -171,6 +175,37 @@ class MessageService {
   }
 
   /**
+   * Maneja la selección de cuenta cuando el usuario tiene una acción pendiente
+   */
+  async handleAccountSelection(user, message) {
+    const UserDBService = require('./db/user.db.service');
+    const AccountDBService = require('./db/account.db.service');
+
+    const command = user.action_data;
+    const accountName = message.trim();
+
+    // Buscar la cuenta mencionada
+    const accounts = await AccountDBService.findByUser(user.user_id);
+    const selectedAccount = accounts.find(a => a.name.toLowerCase().includes(accountName.toLowerCase()));
+
+    if (!selectedAccount) {
+      return `No encontré una cuenta llamada "${accountName}". Por favor elige una de tus cuentas: ${accounts.map(a => a.name).join(', ')}. 💜`;
+    }
+
+    // Completar la transacción
+    command.account = selectedAccount.name; // Actualizar con el nombre real
+
+    // Limpiar estado
+    await UserDBService.updateUser(user.phone_number, {
+      current_action: null,
+      action_data: null
+    });
+
+    // Ejecutar comando
+    return await this.handleFinancialCommand(command, user.phone_number);
+  }
+
+  /**
    * Maneja un comando financiero (registro de gasto o ingreso)
    * @param {Object} command - Comando detectado
    * @param {string} userId - ID del usuario
@@ -178,18 +213,63 @@ class MessageService {
    */
   async handleFinancialCommand(command, userId) {
     try {
-      const { type, amount, description } = command;
+      const { type, amount, description, account } = command;
+      const AccountDBService = require('./db/account.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      // Obtener usuario para ID
+      const user = await UserDBService.findByPhoneNumber(userId);
+
+      // Lógica de selección de cuenta
+      let targetAccount = null;
+
+      if (account) {
+        // Si el usuario especificó cuenta, buscarla
+        const accounts = await AccountDBService.findByUser(user.user_id);
+        targetAccount = accounts.find(a => a.name.toLowerCase().includes(account.toLowerCase()));
+
+        if (!targetAccount) {
+          return `No encontré la cuenta "${account}". Tus cuentas son: ${accounts.map(a => a.name).join(', ')}. ¿Cuál quieres usar? 💜`;
+        }
+      } else {
+        // Si no especificó, verificar cuántas cuentas tiene
+        const accounts = await AccountDBService.findByUser(user.user_id);
+
+        if (accounts.length > 1) {
+          // Si tiene múltiples y no especificó, PREGUNTAR
+          // Guardar estado
+          await UserDBService.updateUser(userId, {
+            current_action: 'selecting_account',
+            action_data: command
+          });
+
+          return `¿Desde qué cuenta quieres registrar este ${type === 'expense' ? 'gasto' : 'ingreso'}? 💜\n\nOpciones: ${accounts.map(a => a.name).join(', ')}`;
+        }
+
+        // Si solo tiene una, usar la default (que ya lo hace FinanceService internamente, pero aquí podemos ser explícitos si queremos)
+        // Dejamos que FinanceService maneje el default si targetAccount es null
+      }
 
       // Categorizar automáticamente
       const category = FinanceService.categorizeTransaction(description);
 
       // Registrar la transacción
+      // Nota: Necesitamos actualizar createTransaction para aceptar accountId explícito si lo tenemos
+      // Por ahora FinanceService.createTransaction usa default si no se pasa nada.
+      // Vamos a asumir que FinanceService.createTransaction será actualizado o usaremos lógica aquí.
+      // Espera, FinanceService.createTransaction NO acepta accountId explícito en su firma actual: (userId, type, amount, description, categoryName)
+      // Debemos actualizar FinanceService también.
+
+      // Por ahora, pasamos el nombre de la cuenta en la descripción o modificamos FinanceService.
+      // Mejor modifiquemos FinanceService para aceptar accountName.
+
       const transaction = await FinanceService.createTransaction(
         userId,
         type,
         amount,
         description,
-        category
+        category,
+        targetAccount ? targetAccount.name : null // Nuevo parámetro
       );
 
       Logger.finance(`Transacción registrada: ${type} - $${amount}`);
@@ -200,8 +280,9 @@ class MessageService {
       // Generar mensaje de confirmación
       const typeText = type === 'expense' ? 'gasto' : 'ingreso';
       const emoji = type === 'expense' ? '💸' : '💰';
+      const accountText = transaction.account_name ? ` en ${transaction.account_name}` : '';
 
-      let response = `${emoji} ¡Listo! Registré tu ${typeText} de $${amount.toFixed(2)} en ${category}.\n\n`;
+      let response = `${emoji} ¡Listo! Registré tu ${typeText} de $${amount.toFixed(2)} en ${category}${accountText}.\n\n`;
 
       if (summary) {
         response += `📊 Resumen de tus ${summary.period}:\n`;

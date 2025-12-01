@@ -1,13 +1,15 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
 const { config } = require('../config/environment');
 const Logger = require('../utils/logger');
 
 /**
- * Servicio de Inteligencia Artificial usando Google Gemini
+ * Servicio de Inteligencia Artificial usando OpenAI
  */
 class AIService {
   constructor() {
-    this.client = new GoogleGenerativeAI(config.gemini.apiKey);
+    this.client = new OpenAI({
+      apiKey: config.openai.apiKey,
+    });
     this.systemPrompt = this.getSystemPrompt();
   }
 
@@ -101,61 +103,79 @@ class AIService {
       Logger.ai(`Procesando mensaje de ${userPhone}`);
       Logger.ai(`Mensaje: "${userMessage}"`);
 
-      const model = this.client.getGenerativeModel({
-        model: config.gemini.model,
-        systemInstruction: this.systemPrompt,
-      });
-
       // Construir el mensaje actual con contexto financiero y fecha
-      let currentMessage = `[Fecha y hora actual: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}]\n\n${userMessage}`;
+      let currentMessageContent = `[Fecha y hora actual: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}]\n\n${userMessage}`;
 
       if (context.financialSummary) {
-        currentMessage = `[Contexto financiero: ${context.financialSummary}]\n\n${currentMessage}`;
+        currentMessageContent = `[Contexto financiero: ${context.financialSummary}]\n\n${currentMessageContent}`;
       }
 
-      // Si hay historial de conversación, usar chat con contexto
+      // Preparar mensajes para OpenAI
+      const messages = [
+        { role: 'system', content: this.systemPrompt }
+      ];
+
+      // Si hay historial de conversación, agregarlo
       if (context.conversationHistory && context.conversationHistory.length > 0) {
         Logger.info(`📜 Usando historial de ${context.conversationHistory.length} mensajes`);
 
-        const chat = model.startChat({
-          history: context.conversationHistory,
-        });
+        // Mapear historial de Gemini (parts: [{text: ...}]) a OpenAI (content: ...)
+        // Asumiendo que el historial viene en formato compatible o necesitamos adaptarlo
+        // El servicio de conversación debería entregar un formato compatible o lo adaptamos aquí
+        // Por ahora, asumiremos que conversation.service entrega un formato genérico o lo adaptamos
 
-        const result = await chat.sendMessage(currentMessage);
-        const response = await result.response;
-        const aiResponse = response.text().trim();
+        // Nota: conversation.service.js getHistoryForGemini devuelve formato Gemini.
+        // Necesitaremos actualizar conversation.service.js también, pero aquí podemos hacer una adaptación defensiva
 
-        if (!aiResponse) {
-          throw new Error('Respuesta vacía de la IA');
+        for (const msg of context.conversationHistory) {
+          let role = 'user';
+          let content = '';
+
+          // Adaptar formato Gemini si es necesario
+          if (msg.role === 'model') role = 'assistant';
+          else if (msg.role === 'user') role = 'user';
+
+          if (msg.parts && msg.parts[0] && msg.parts[0].text) {
+            content = msg.parts[0].text;
+          } else if (msg.content) {
+            content = msg.content;
+          }
+
+          if (content) {
+            messages.push({ role, content });
+          }
         }
-
-        Logger.success('Respuesta de IA generada exitosamente (con historial)');
-        return aiResponse;
       } else {
-        // Sin historial, usar generación simple
         Logger.info('📝 Sin historial previo, iniciando nueva conversación');
-
-        const result = await model.generateContent(currentMessage);
-        const response = await result.response;
-        const aiResponse = response.text().trim();
-
-        if (!aiResponse) {
-          throw new Error('Respuesta vacía de la IA');
-        }
-
-        Logger.success('Respuesta de IA generada exitosamente');
-        return aiResponse;
       }
+
+      // Agregar mensaje actual
+      messages.push({ role: 'user', content: currentMessageContent });
+
+      const completion = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: messages,
+        max_tokens: 1000, // Ajustar según necesidad, 700 chars ~ 200-300 tokens, damos margen
+      });
+
+      const aiResponse = completion.choices[0].message.content.trim();
+
+      if (!aiResponse) {
+        throw new Error('Respuesta vacía de la IA');
+      }
+
+      Logger.success('Respuesta de IA generada exitosamente');
+      return aiResponse;
 
     } catch (error) {
-      Logger.error('Error al consultar Google Gemini', error);
+      Logger.error('Error al consultar OpenAI', error);
 
       // Manejar errores específicos
-      if (error.message?.includes('API key') || error.status === 401) {
-        throw new Error('Error de autenticación con Google Gemini');
+      if (error.status === 401) {
+        throw new Error('Error de autenticación con OpenAI');
       }
 
-      if (error.message?.includes('quota') || error.status === 429) {
+      if (error.status === 429) {
         return 'Lo siento, el servicio está temporalmente ocupado. Por favor, inténtalo en unos momentos. 💜';
       }
 
@@ -177,23 +197,42 @@ class AIService {
       income: /(?:registrar\s+)?(?:ingreso|gané|recibí)(?:\s*:)?\s*\$?(\d+(?:\.\d{2})?)\s+(.+)/i,
     };
 
+    const extractAccount = (fullDescription) => {
+      // Buscar patrones como "desde Nequi", "con Bancolombia", "en Efectivo"
+      // Palabras clave: desde, con, por, en (cuidado con "en" para lugares)
+      const accountPattern = /\s+(?:desde|con|por)\s+([a-zA-Z0-9\s]+)$/i;
+      const match = fullDescription.match(accountPattern);
+
+      if (match) {
+        return {
+          description: fullDescription.replace(accountPattern, '').trim(),
+          account: match[1].trim()
+        };
+      }
+      return { description: fullDescription, account: null };
+    };
+
     // Intentar detectar gasto
     let match = lowerMessage.match(patterns.expense);
     if (match) {
+      const { description, account } = extractAccount(match[2].trim());
       return {
         type: 'expense',
         amount: parseFloat(match[1]),
-        description: match[2].trim(),
+        description: description,
+        account: account
       };
     }
 
     // Intentar detectar ingreso
     match = lowerMessage.match(patterns.income);
     if (match) {
+      const { description, account } = extractAccount(match[2].trim());
       return {
         type: 'income',
         amount: parseFloat(match[1]),
-        description: match[2].trim(),
+        description: description,
+        account: account
       };
     }
 

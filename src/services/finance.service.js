@@ -13,9 +13,10 @@ class FinanceService {
    * @param {number} amount - Monto
    * @param {string} description - Descripción
    * @param {string} categoryName - Nombre de la categoría (opcional)
+   * @param {string} accountName - Nombre de la cuenta (opcional)
    * @returns {Promise<Object>}
    */
-  async createTransaction(userId, type, amount, description, categoryName = null) {
+  async createTransaction(userId, type, amount, description, categoryName = null, accountName = null) {
     try {
       // 1. Buscar o crear el usuario
       const user = await UserDBService.findOrCreate({ phoneNumber: userId });
@@ -31,8 +32,22 @@ class FinanceService {
         category = await CategoryDBService.findOrCreate(user.user_id, autoCategoryName, type);
       }
 
-      // 3. Obtener la cuenta predeterminada
-      const account = await AccountDBService.getDefaultAccount(user.user_id);
+      // 3. Determinar la cuenta
+      let account = null;
+      if (accountName) {
+        // Buscar cuenta específica
+        const accounts = await AccountDBService.findByUser(user.user_id);
+        account = accounts.find(a => a.name.toLowerCase().includes(accountName.toLowerCase()));
+
+        // Si no se encuentra, usar default pero loguear warning
+        if (!account) {
+          Logger.warning(`Cuenta "${accountName}" no encontrada para ${userId}, usando default.`);
+          account = await AccountDBService.getDefaultAccount(user.user_id);
+        }
+      } else {
+        // Usar cuenta predeterminada
+        account = await AccountDBService.getDefaultAccount(user.user_id);
+      }
 
       // 4. Crear la transacción
       const transaction = await TransactionDBService.create({
@@ -47,7 +62,7 @@ class FinanceService {
       });
 
       Logger.finance(`Transacción registrada: ${type} de $${amount} para ${userId}`);
-      
+
       return {
         ...transaction,
         category_name: category.name,

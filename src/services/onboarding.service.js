@@ -59,8 +59,8 @@ class OnboardingService {
     }
 
     /**
-     * Maneja el paso de nombre
-     */
+   * Maneja el paso de nombre
+   */
     async handleNameStep(user, name) {
         if (name.length < 2) {
             return "Ese nombre es muy corto. ¿Cómo te llamas realmente? 😊";
@@ -72,41 +72,64 @@ class OnboardingService {
             onboarding_step: 'accounts'
         });
 
-        return `¡Un gusto conocerte, ${name}! 💜\n\nPara poder registrar tus gastos e ingresos, necesito saber qué cuentas usas.\n\nPor ejemplo: "Efectivo", "Bancolombia", "Nequi", "Davivienda".\n\nEscribe los nombres de tus cuentas separados por coma (o escribe "Efectivo" para empezar con lo básico).`;
+        return `¡Un gusto conocerte, ${name}! 💜\n\nPara organizar tus finanzas, necesito saber qué cuentas usas y cuánto dinero tienes en ellas.\n\nPor ejemplo:\n"Efectivo: 50.000, Nequi: 200.000"\n\nEscribe tus cuentas y sus saldos separados por coma.`;
     }
 
     /**
      * Maneja el paso de cuentas
      */
     async handleAccountsStep(user, accountsStr) {
-        const accounts = accountsStr.split(/[,y\n]+/).map(a => a.trim()).filter(a => a.length > 0);
+        // Separar por comas o saltos de línea
+        const accountsRaw = accountsStr.split(/[,;\n]+/).map(a => a.trim()).filter(a => a.length > 0);
 
-        if (accounts.length === 0) {
-            return "Necesito al menos una cuenta para comenzar. ¿Qué tal si escribes 'Efectivo'? 😊";
+        if (accountsRaw.length === 0) {
+            return "Necesito al menos una cuenta para comenzar. ¿Qué tal si escribes 'Efectivo: 0'? 😊";
         }
 
         // Crear cuentas
         let createdAccounts = [];
-        for (const accName of accounts) {
+
+        for (const raw of accountsRaw) {
+            // Intentar extraer nombre y monto
+            // Regex busca: (Nombre de cuenta) (separador opcional) (Monto con posibles puntos/comas)
+            const match = raw.match(/^(.+?)(?:[:\s\$]+)([\d\.,]+)$/);
+
+            let name, balance = 0;
+
+            if (match) {
+                name = match[1].trim();
+                // Limpiar monto: quitar puntos (miles) y dejar solo números y punto decimal si hay
+                // Asumimos formato local: 1.000.000 (miles con punto) -> 1000000
+                let amountStr = match[2].replace(/\./g, '').replace(',', '.');
+                balance = parseFloat(amountStr) || 0;
+            } else {
+                // Si no hay monto explícito, asumir 0
+                name = raw;
+                balance = 0;
+            }
+
             // Determinar tipo básico
             let type = 'savings';
-            const lowerName = accName.toLowerCase();
+            const lowerName = name.toLowerCase();
 
             if (lowerName.includes('efectivo') || lowerName.includes('cash')) {
                 type = 'cash';
             } else if (lowerName.includes('tarjeta') || lowerName.includes('crédito') || lowerName.includes('tc')) {
                 type = 'credit_card';
             } else if (lowerName.includes('nequi') || lowerName.includes('daviplata')) {
-                type = 'savings'; // Digital wallets as savings for simplicity
+                type = 'savings';
             }
 
             await AccountDBService.createAccount(user.user_id, {
-                name: accName,
+                name: name,
                 type: type,
-                balance: 0,
-                isDefault: createdAccounts.length === 0 // La primera es default
+                balance: balance,
+                isDefault: createdAccounts.length === 0
             });
-            createdAccounts.push(accName);
+
+            // Formatear saldo para el mensaje
+            const formattedBalance = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(balance);
+            createdAccounts.push(`${name} (${formattedBalance})`);
         }
 
         // Finalizar onboarding
@@ -115,7 +138,7 @@ class OnboardingService {
             onboarding_completed: true
         });
 
-        return `¡Perfecto! He creado las siguientes cuentas: ${createdAccounts.join(', ')}.\n\n¡Ya estamos listos! 🚀\n\nPuedes empezar diciéndome cosas como:\n- "Registrar gasto de $20.000 en comida"\n- "Ingreso de $1.000.000 salario"\n- "¿Cómo van mis finanzas?"\n\n¿Qué quieres hacer primero? 💜`;
+        return `¡Perfecto! He creado las siguientes cuentas:\n• ${createdAccounts.join('\n• ')}\n\n¡Ya estamos listos! 🚀\n\nPuedes empezar diciéndome cosas como:\n- "Registrar gasto de $20.000 en comida"\n- "Ingreso de $1.000.000 salario"\n- "¿Cómo van mis finanzas?"\n\n¿Qué quieres hacer primero? 💜`;
     }
 }
 
