@@ -96,6 +96,7 @@ class MessageService {
       const aiResponse = await AIService.getResponse(message, userId, {
         financialSummary: financialContext,
         conversationHistory: conversationHistory,
+        userName: user.name
       });
 
       // 6. AHORA sí, guardar el mensaje del usuario y la respuesta en el historial

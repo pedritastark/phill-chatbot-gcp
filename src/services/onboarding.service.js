@@ -72,7 +72,7 @@ class OnboardingService {
             onboarding_step: 'accounts'
         });
 
-        return `¡Un gusto conocerte, ${name}! 💜\n\nPara organizar tus finanzas, necesito saber qué cuentas usas y cuánto dinero tienes en ellas.\n\nPor ejemplo:\n"Efectivo: 50.000, Nequi: 200.000"\n\nEscribe tus cuentas y sus saldos separados por coma.`;
+        return `¡Un gusto conocerte, ${name}! 💜\n\nPara organizar tus finanzas, vamos a empezar simple. Necesito saber cuánto dinero tienes en **Efectivo** y en tu **Banco**.\n\nPor favor responde con los saldos de cada uno.\n\nEjemplo:\n"Efectivo: 50.000, Banco: 200.000"`;
     }
 
     /**
@@ -82,62 +82,77 @@ class OnboardingService {
         // Separar por comas o saltos de línea
         const accountsRaw = accountsStr.split(/[,;\n]+/).map(a => a.trim()).filter(a => a.length > 0);
 
-        // Validación estricta: Debe haber al menos un número en el mensaje (para el saldo)
-        // Esto evita que saludos como "Buenos días" se interpreten como cuentas
+        // Validación estricta: Debe haber al menos un número en el mensaje
         if (!/\d/.test(accountsStr)) {
-            return "Hmm, no veo ningún saldo en tu mensaje. 🤔\n\nPor favor escribe el nombre de la cuenta y cuánto dinero tienes.\n\nEjemplo: \"Nequi: 50.000\" o \"Efectivo: 0\"";
+            return "Hmm, no veo ningún saldo en tu mensaje. 🤔\n\nPor favor escribe cuánto tienes en Efectivo y en Banco.\n\nEjemplo: \"Efectivo: 50.000, Banco: 200.000\"";
         }
 
-        if (accountsRaw.length === 0) {
-            return "Necesito al menos una cuenta para comenzar. ¿Qué tal si escribes 'Efectivo: 0'? 😊";
-        }
+        let cashBalance = 0;
+        let bankBalance = 0;
+        let foundCash = false;
+        let foundBank = false;
 
-        // Crear cuentas
-        let createdAccounts = [];
-
+        // Intentar parsear explícitamente
         for (const raw of accountsRaw) {
-            // Intentar extraer nombre y monto
-            // Regex busca: (Nombre de cuenta) (separador opcional) (Monto con posibles puntos/comas)
             const match = raw.match(/^(.+?)(?:[:\s\$]+)([\d\.,]+)$/);
-
-            let name, balance = 0;
-
             if (match) {
-                name = match[1].trim();
-                // Limpiar monto: quitar puntos (miles) y dejar solo números y punto decimal si hay
-                // Asumimos formato local: 1.000.000 (miles con punto) -> 1000000
+                const name = match[1].toLowerCase();
                 let amountStr = match[2].replace(/\./g, '').replace(',', '.');
-                balance = parseFloat(amountStr) || 0;
-            } else {
-                // Si no hay monto explícito, asumir 0
-                name = raw;
-                balance = 0;
+                let amount = parseFloat(amountStr) || 0;
+
+                if (name.includes('efectivo') || name.includes('cash')) {
+                    cashBalance = amount;
+                    foundCash = true;
+                } else if (name.includes('banco') || name.includes('bank') || name.includes('cuenta') || name.includes('nequi') || name.includes('daviplata')) {
+                    // Asumimos que cualquier otra cosa parecida a banco o cuenta va al "Banco" genérico
+                    bankBalance = amount;
+                    foundBank = true;
+                }
             }
-
-            // Determinar tipo básico
-            let type = 'savings';
-            const lowerName = name.toLowerCase();
-
-            if (lowerName.includes('efectivo') || lowerName.includes('cash')) {
-                type = 'cash';
-            } else if (lowerName.includes('tarjeta') || lowerName.includes('crédito') || lowerName.includes('tc')) {
-                type = 'credit_card';
-            } else if (lowerName.includes('nequi') || lowerName.includes('daviplata')) {
-                type = 'savings';
-            }
-
-            await AccountDBService.create({
-                userId: user.user_id,
-                name: name,
-                type: type,
-                balance: balance,
-                isDefault: createdAccounts.length === 0
-            });
-
-            // Formatear saldo para el mensaje
-            const formattedBalance = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(balance);
-            createdAccounts.push(`${name} (${formattedBalance})`);
         }
+
+        // Si no se encontraron explícitamente pero hay 2 números, asumimos orden: Efectivo, Banco
+        if (!foundCash && !foundBank) {
+            const numbers = accountsStr.match(/[\d\.,]+/g);
+            if (numbers && numbers.length >= 2) {
+                cashBalance = parseFloat(numbers[0].replace(/\./g, '').replace(',', '.')) || 0;
+                bankBalance = parseFloat(numbers[1].replace(/\./g, '').replace(',', '.')) || 0;
+                foundCash = true;
+                foundBank = true;
+            }
+        }
+
+        // Si aún falta información, pedir aclaración o asumir 0 si al menos uno se encontró
+        if (!foundCash && !foundBank) {
+            return "No pude entender los saldos. 😅\n\nPor favor intenta escribirlos así:\n\"Efectivo: 50.000, Banco: 100.000\"";
+        }
+
+        // Crear cuentas fijas
+        const createdAccounts = [];
+
+        // 1. Efectivo
+        await AccountDBService.create({
+            userId: user.user_id,
+            name: 'Efectivo',
+            type: 'cash',
+            balance: cashBalance,
+            isDefault: true,
+            icon: '💵',
+            color: '#10b981'
+        });
+        createdAccounts.push(`Efectivo (${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(cashBalance)})`);
+
+        // 2. Banco
+        await AccountDBService.create({
+            userId: user.user_id,
+            name: 'Banco',
+            type: 'savings',
+            balance: bankBalance,
+            isDefault: false,
+            icon: '🏦',
+            color: '#3b82f6'
+        });
+        createdAccounts.push(`Banco (${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(bankBalance)})`);
 
         // Finalizar onboarding
         await UserDBService.updateUser(user.phone_number, {

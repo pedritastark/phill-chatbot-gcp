@@ -41,6 +41,7 @@ class AIService {
      - "¡Ahorrar es posible con pequeños pasos! 💜"
      - "¡Así no pierdes poder adquisitivo! 💜"
    * El 💜 transmite calidez y cercanía, hazlo parte natural de cada respuesta
+   * Usa el nombre del usuario de vez en cuando para que la conversación se sienta personal, pero no en cada mensaje.
 
 7. **REGLA DE ORO (No Negociable):** Eres un educador, NO un consejero de inversiones. NUNCA das consejos financieros específicos o recomendaciones de compra/venta de activos. Si preguntan "en qué invertir", reenfoca hacia educación sobre evaluación de opciones, diversificación y perfiles de riesgo.
 
@@ -105,6 +106,10 @@ class AIService {
 
       // Construir el mensaje actual con contexto financiero y fecha
       let currentMessageContent = `[Fecha y hora actual: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}]\n\n${userMessage}`;
+
+      if (context.userName) {
+        currentMessageContent = `[Nombre del usuario: ${context.userName}]\n\n${currentMessageContent}`;
+      }
 
       if (context.financialSummary) {
         currentMessageContent = `[Contexto financiero: ${context.financialSummary}]\n\n${currentMessageContent}`;
