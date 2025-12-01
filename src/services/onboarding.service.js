@@ -32,7 +32,7 @@ class OnboardingService {
      */
     async processMessage(userId, message) {
         try {
-            const user = await UserDBService.getUserByPhone(userId);
+            const user = await UserDBService.findByPhoneNumber(userId);
 
             if (!user) {
                 throw new Error('Usuario no encontrado durante onboarding');
