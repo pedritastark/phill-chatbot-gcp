@@ -30,7 +30,7 @@ async function startServer() {
       Logger.success(`🚀 Phill WhatsApp Bot iniciado`);
       Logger.info(`📡 Puerto: ${config.port}`);
       Logger.info(`🌍 Entorno: ${config.nodeEnv}`);
-      Logger.info(`🤖 Modelo: ${config.gemini.model}`);
+      Logger.info(`🤖 Modelo: ${config.openai.model}`);
       Logger.info(`📍 Webhook: http://localhost:${config.port}/webhook`);
       Logger.info(`💚 Health: http://localhost:${config.port}/health`);
 
