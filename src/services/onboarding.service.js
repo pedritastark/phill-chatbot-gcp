@@ -120,7 +120,8 @@ class OnboardingService {
                 type = 'savings';
             }
 
-            await AccountDBService.createAccount(user.user_id, {
+            await AccountDBService.create({
+                userId: user.user_id,
                 name: name,
                 type: type,
                 balance: balance,
