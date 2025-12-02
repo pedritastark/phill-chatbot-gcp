@@ -88,6 +88,13 @@ class OnboardingService {
      */
     async handleNameStep(user, message) {
         const name = message.trim();
+        const lowerName = name.toLowerCase();
+
+        // Validación de nombres reservados
+        const reservedWords = ['admin', 'system', 'phill', 'bot', 'null', 'undefined', 'system info', 'info'];
+        if (reservedWords.some(word => lowerName.includes(word))) {
+            return "Ese nombre suena muy robótico. 🤖 ¿Cuál es tu nombre real? (O dime cómo quieres que te diga)";
+        }
 
         if (name.length < 2) {
             return "Ese nombre es muy corto. 🤔 ¿Cómo quieres que te diga?";
@@ -95,10 +102,10 @@ class OnboardingService {
 
         await UserDBService.updateUser(user.phone_number, {
             name: name,
-            onboarding_step: 'challenge_input'
+            onboarding_step: 'challenge_input' // Transition to challenge step
         });
 
-        return `¡Un gusto, ${name}! 🤝\n\nMi trabajo no es solo organizar números, es hacer que tu dinero tenga alas 💸.\n\nMis especialidades son:\n• Optimización de gastos.\n• Estrategias de inversión.\n• Blindaje de tu patrimonio.\n\nPero las palabras se las lleva el viento... 🌬️\n\nAntes de que me confíes tus números, quiero que confíes en mi capacidad.\n\nPonme a prueba. Hazme una pregunta difícil sobre finanzas o economía (tasas de interés, inflación, cómo ahorrar). La que quieras. Estoy listo 😎.`;
+        return `¡Un gusto, ${name}! 🤝\n\nEstoy aquí para:\n\n✅ Registrar tus gastos e ingresos.\n✅ Darte asesoramiento financiero personal.\n✅ Recordarte lo que no quieres olvidar.\n\nPero antes de que me confíes tus números, quiero que confíes en mi capacidad.\n\nPonme a prueba. Hazme una pregunta difícil sobre finanzas o economía (tasas de interés, inflación, cómo ahorrar). La que quieras. Estoy listo 😎.`;
     }
 
     /**
@@ -121,7 +128,7 @@ class OnboardingService {
             onboarding_step: 'data_acceptance'
         });
 
-        return `${answer}\n\n¡Exacto! Veo que sabes. 😎\n\nAhora, para pasar a la estrategia financiera y preguntarte por tu capital, por ley necesito tu luz verde para manejar tus datos con total confidencialidad. 🔒\n\n¿Aceptas los términos y política de datos para arrancar? (Responde "Acepto" o "Sí")`;
+        return `${answer}\n\nAhora, para pasar a la estrategia financiera y preguntarte por tu capital, por ley necesito tu luz verde para manejar tus datos con total confidencialidad. 🔒\n\n¿Aceptas los términos y política de datos para arrancar? (Responde "Acepto" o "Sí")`;
     }
 
     /**

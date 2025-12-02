@@ -44,7 +44,7 @@ class AdminService {
         const lowerCmd = command.toLowerCase().trim();
 
         // 1. System Status
-        if (lowerCmd === 'system status' || lowerCmd === 'status' || lowerCmd === 'estado') {
+        if (lowerCmd === 'system status' || lowerCmd === 'status' || lowerCmd === 'estado' || lowerCmd === 'system info') {
             return await this.getSystemStatus();
         }
 
