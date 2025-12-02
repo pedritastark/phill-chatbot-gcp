@@ -16,12 +16,12 @@ class OnboardingService {
         try {
             // Asegurar que el usuario tenga el estado correcto
             await UserDBService.updateUser(userId, {
-                onboarding_step: 'cash_balance',
+                onboarding_step: 'name_input',
                 onboarding_completed: false,
                 onboarding_data: {} // Inicializar datos temporales
             });
 
-            return "¡Hola! Qué bueno que decidiste tomar el control de tu dinero. Soy Phill, tu nuevo asistente financiero, y vamos a poner orden en tus cuentas de una vez por todas. 🚀\n\nPara empezar con el pie derecho, necesito los números claros. Cuéntame, ¿cuánto efectivo tienes en tu cartera ahora mismo? 💜";
+            return "¡Hola! 👋 Soy Phill, tu nuevo asistente financiero personal.\n\nMi misión es ayudarte a organizar tu dinero y hacer que crezca. 🚀\n\nPero antes de empezar, cuéntame... ¿Cómo te gustaría que te llame? 💜";
         } catch (error) {
             Logger.error(`Error iniciando onboarding para ${userId}`, error);
             throw error;
@@ -46,6 +46,9 @@ class OnboardingService {
             const cleanMessage = message.trim();
 
             switch (step) {
+                case 'name_input':
+                    return await this.handleNameStep(user, cleanMessage);
+
                 case 'cash_balance':
                     return await this.handleCashBalanceStep(user, cleanMessage);
 
@@ -72,6 +75,24 @@ class OnboardingService {
             Logger.error(`Error procesando onboarding para ${userId}`, error);
             return "Lo siento, tuve un pequeño problema técnico. ¿Podemos intentar de nuevo? 💜";
         }
+    }
+
+    /**
+     * Paso 0: Recibe nombre -> Pide saldo en efectivo
+     */
+    async handleNameStep(user, message) {
+        const name = message.trim();
+
+        if (name.length < 2) {
+            return "Ese nombre es muy corto. 🤔 ¿Cómo quieres que te diga?";
+        }
+
+        await UserDBService.updateUser(user.phone_number, {
+            name: name,
+            onboarding_step: 'cash_balance'
+        });
+
+        return `¡Un gusto, ${name}! 🤝\n\nAhora sí, pongamos orden. Para empezar con el pie derecho, necesito los números claros.\n\nCuéntame, ¿cuánto efectivo tienes en tu cartera ahora mismo? 💵`;
     }
 
     /**
