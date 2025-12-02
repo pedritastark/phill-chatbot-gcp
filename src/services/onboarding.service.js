@@ -93,12 +93,24 @@ class OnboardingService {
      * Paso 0: Recibe nombre -> Pide saldo en efectivo
      */
     async handleNameStep(user, message) {
-        const name = message.trim();
+        let name = message.trim();
         const lowerName = name.toLowerCase();
+
+        // Limpiar prefijos comunes si el usuario escribe una frase completa
+        const prefixes = ['me llamo', 'mi nombre es', 'soy', 'dime', 'me dicen'];
+        for (const prefix of prefixes) {
+            if (lowerName.startsWith(prefix + ' ')) {
+                name = name.substring(prefix.length).trim();
+                break;
+            }
+        }
+
+        // Recalcular lowerName para validación
+        const cleanLowerName = name.toLowerCase();
 
         // Validación de nombres reservados
         const reservedWords = ['admin', 'system', 'phill', 'bot', 'null', 'undefined', 'system info', 'info'];
-        if (reservedWords.some(word => lowerName.includes(word))) {
+        if (reservedWords.some(word => cleanLowerName.includes(word))) {
             return "Ese nombre suena muy robótico. 🤖 ¿Cuál es tu nombre real? (O dime cómo quieres que te diga)";
         }
 
@@ -111,7 +123,7 @@ class OnboardingService {
             onboarding_step: 'data_acceptance' // Skip challenge, go to privacy
         });
 
-        return `¡Un gusto, ${name}! 💜\n\nAntes de empezar con la magia, pongámonos serios un segundo: Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura y ayudarte a organizar tus cuentas. ¿Aceptas los términos y condiciones? �️`;
+        return `¡Un gusto, ${name}! 💜\n\nAntes de empezar con la magia, pongámonos serios un segundo: Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura y ayudarte a organizar tus cuentas. ¿Aceptas los términos y condiciones? 🔒`;
     }
 
     /**

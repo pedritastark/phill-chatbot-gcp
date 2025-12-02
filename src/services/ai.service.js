@@ -308,7 +308,7 @@ class AIService {
    * Si te pasas, costará dinero y aburrirás al usuario. Sé conciso.
 
 Ejemplo de respuesta ideal:
-"¡Listo! � Registré los $50 de la cena en tu cuenta de Banco.
+"¡Listo!  Registré los $50 de la cena en tu cuenta de Banco.
 Ojo, que ya casi tocamos el límite de salidas del mes. ¡Vamos a cerrar la semana fuerte! 🔥 💜"`;
   }
 
