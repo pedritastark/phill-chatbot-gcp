@@ -51,7 +51,7 @@ const config = {
   },
 
   // Modo Mantenimiento
-  maintenanceMode: true, // Forzar modo mantenimiento
+  maintenanceMode: false, // Modo mantenimiento desactivado
 };
 
 /**
