@@ -52,6 +52,9 @@ class OnboardingService {
                 case 'challenge_input':
                     return await this.handleChallengeStep(user, cleanMessage);
 
+                case 'data_acceptance':
+                    return await this.handleDataAcceptanceStep(user, cleanMessage);
+
                 case 'cash_balance':
                     return await this.handleCashBalanceStep(user, cleanMessage);
 
@@ -115,10 +118,28 @@ class OnboardingService {
         const answer = aiResponse.content || "Esa es una buena pregunta. 🤔";
 
         await UserDBService.updateUser(user.phone_number, {
+            onboarding_step: 'data_acceptance'
+        });
+
+        return `${answer}\n\n¡Exacto! Veo que sabes. 😎\n\nAhora, para pasar a la estrategia financiera y preguntarte por tu capital, por ley necesito tu luz verde para manejar tus datos con total confidencialidad. 🔒\n\n¿Aceptas los términos y política de datos para arrancar? (Responde "Acepto" o "Sí")`;
+    }
+
+    /**
+     * Paso 0.8: Recibe aceptación de datos -> Pide saldo en efectivo
+     */
+    async handleDataAcceptanceStep(user, message) {
+        const clean = message.toLowerCase();
+        const accepted = ['acepto', 'si', 'sí', 'dale', 'ok', 'claro', 'de una'].some(w => clean.includes(w));
+
+        if (!accepted) {
+            return "Entiendo tu precaución. 🛡️ Pero sin tu permiso, no puedo ser tu asistente financiero. Todo queda entre nosotros. ¿Te animas a aceptar para empezar? (Responde 'Acepto')";
+        }
+
+        await UserDBService.updateUser(user.phone_number, {
             onboarding_step: 'cash_balance'
         });
 
-        return `${answer}\n\nComo ves, juego en serio. 😎\n\nAhora quiero trazar tu ruta financiera, y para eso necesito saber nuestro punto de partida.\n\nTodo lo que hablemos queda en nuestra bóveda privada, solo tú y yo. 🔒\n\nPara arrancar con el pie derecho:\n\n¿Con cuánto dinero en efectivo dispones hoy para empezar a trabajar? 💵`;
+        return `¡Perfecto! 🤝 Luz verde recibida.\n\nAhora sí, vamos a lo importante. Quiero trazar tu ruta financiera, y para eso necesito saber nuestro punto de partida.\n\nPara arrancar con el pie derecho:\n\n¿Con cuánto dinero en efectivo dispones hoy para empezar a trabajar? 💵`;
     }
 
     /**
