@@ -18,20 +18,20 @@ const Logger = require('../utils/logger');
 const poolConfig = {
   // Opción 1: URL completa (ideal para producción)
   connectionString: process.env.DATABASE_URL,
-  
+
   // Opción 2: Configuración individual (ideal para desarrollo)
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'phill_db',
-  user: process.env.DB_USER || 'postgres',
+  user: process.env.DB_USER || 'sebastianpedraza',
   password: process.env.DB_PASSWORD || '',
-  
+
   // Configuración del pool
   max: parseInt(process.env.DB_POOL_MAX || '20'), // Máximo de conexiones
   min: parseInt(process.env.DB_POOL_MIN || '2'),  // Mínimo de conexiones
   idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000'), // Tiempo de inactividad
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT || '5000'), // Timeout de conexión
-  
+
   // SSL para producción (ej: Heroku, AWS RDS)
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: false
@@ -64,7 +64,7 @@ async function testConnection() {
     const client = await pool.connect();
     const result = await client.query('SELECT NOW()');
     client.release();
-    
+
     Logger.success('✅ Conexión a PostgreSQL exitosa');
     Logger.info(`🕐 Hora del servidor: ${result.rows[0].now}`);
     return true;
@@ -88,11 +88,11 @@ async function query(text, params = []) {
   try {
     const result = await pool.query(text, params);
     const duration = Date.now() - start;
-    
+
     if (duration > 1000) {
       Logger.warning(`⚠️ Query lenta (${duration}ms): ${text.substring(0, 100)}...`);
     }
-    
+
     return result;
   } catch (error) {
     Logger.error('Error en query de PostgreSQL', error);
@@ -110,19 +110,19 @@ async function getClient() {
   const client = await pool.connect();
   const query = client.query;
   const release = client.release;
-  
+
   // Timeout para transacciones largas
   const timeout = setTimeout(() => {
     Logger.error('Cliente no liberado después de 30 segundos');
   }, 30000);
-  
+
   // Override release para limpiar el timeout
   client.release = () => {
     clearTimeout(timeout);
     client.release = release;
     return release.apply(client);
   };
-  
+
   return client;
 }
 
@@ -133,7 +133,7 @@ async function getClient() {
  */
 async function transaction(callback) {
   const client = await getClient();
-  
+
   try {
     await client.query('BEGIN');
     const result = await callback(client);
