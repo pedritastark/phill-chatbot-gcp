@@ -73,13 +73,59 @@ class FinanceService {
         confidenceScore: categoryName ? 1.0 : 0.8,
       });
 
-      Logger.finance(`Transacción registrada: ${type} de $${amount} para ${userId}`);
+      // 5. Actualizar Racha (Streak)
+      const today = new Date();
+      // Ajustar a zona horaria Colombia para cálculo de fechas
+      const colombiaTime = new Date(today.getTime() - (5 * 60 * 60 * 1000));
+      const todayStr = colombiaTime.toISOString().split('T')[0];
+
+      let lastActivityStr = null;
+      if (user.last_activity_date) {
+        const lastDate = new Date(user.last_activity_date);
+        // Asumimos que last_activity_date ya se guardó correctamente, pero por si acaso
+        const lastColombiaTime = new Date(lastDate.getTime() - (5 * 60 * 60 * 1000)); // Ajuste si viene en UTC
+        // Mejor: Si la DB guarda DATE sin hora, user.last_activity_date será string YYYY-MM-DD o Date a medianoche UTC
+        // Simplificación: Comparar strings YYYY-MM-DD
+        lastActivityStr = new Date(user.last_activity_date).toISOString().split('T')[0];
+      }
+
+      let newStreak = user.current_streak || 0;
+      let streakMessage = '';
+
+      if (lastActivityStr !== todayStr) {
+        // Calcular ayer
+        const yesterday = new Date(colombiaTime);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (lastActivityStr === yesterdayStr) {
+          newStreak++;
+          streakMessage = `🔥 ¡${newStreak} días en racha!`;
+        } else {
+          newStreak = 1;
+          streakMessage = '🔥 ¡Empezaste una nueva racha!';
+        }
+
+        // Actualizar usuario
+        await UserDBService.updateUser(userId, {
+          current_streak: newStreak,
+          last_activity_date: todayStr
+        });
+      } else {
+        streakMessage = `🔥 Racha actual: ${newStreak} días`;
+      }
+
+      Logger.finance(`Transacción registrada: ${type} de $${amount} para ${userId}. Racha: ${newStreak}`);
 
       return {
         ...transaction,
         category_name: category.name,
         category_icon: category.icon,
         account_name: account ? account.name : null,
+        streak_info: {
+          count: newStreak,
+          message: streakMessage
+        }
       };
 
     } catch (error) {

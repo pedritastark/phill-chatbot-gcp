@@ -4,6 +4,8 @@ const ConversationService = require('./conversation.service');
 const Logger = require('../utils/logger');
 const { config } = require('../config/environment');
 const { formatCurrency } = require('../utils/formatter');
+const ReportService = require('./report.service');
+const VisualReportService = require('./visual.report.service');
 
 /**
  * Servicio para procesar mensajes de usuarios
@@ -58,6 +60,42 @@ class MessageService {
         return onboardingResponse;
       }
 
+      // 0.5. Verificar comandos de privacidad
+      const lowerMsg = message.toLowerCase().trim();
+      if (['silencio', 'hide', 'modo discreto', 'privacidad', '🤫', '🥷'].includes(lowerMsg)) {
+        await UserDBService.updateUser(userId, { privacy_mode: true });
+        return '🙈 Modo Discreto Activado. No mostraré saldos en pantalla hasta que digas "Mostrar". 💜';
+      } else if (['mostrar', 'show', 'ver saldos', '👀'].includes(lowerMsg)) {
+        await UserDBService.updateUser(userId, { privacy_mode: false });
+        // Actualizar objeto usuario local para que el siguiente bloque use el estado correcto
+        user.privacy_mode = false;
+        return '👀 Modo Visible Activado. Tus saldos vuelven a estar disponibles. 💜';
+      }
+
+      // 0.5.1. Menú de Ayuda
+      if (['ayuda', 'menu', 'menú', 'comandos', 'help', 'sos'].includes(lowerMsg)) {
+        return `Aquí tienes mis superpoderes. ¿Qué necesitas? 😎
+
+💸 *Registrar*: "Gasté 10 en café"
+📈 *Reporte*: "¿Cómo voy este mes?"
+🎨 *Visual*: "Resumen visual"
+🤫 *Privacidad*: Mándame un 🤫 para ocultar saldos.
+🆘 *Soporte*: Hablar con un humano.
+
+¿Por dónde empezamos? 💜`;
+      }
+
+      // 0.6. Verificar respuesta de "Compartir Logro" (Reporte Visual)
+      if (['1', 'compartir', 'compartir logro', 'share'].includes(lowerMsg)) {
+        const mediaUrl = await VisualReportService.generateWeeklyReport(userId, true); // true = censored
+        return {
+          message: 'Aquí tienes la versión para presumir. 📸 ¡Súbela y etiquétame! (Mentira, no tengo Instagram... aún). 💜',
+          mediaUrl: mediaUrl
+        };
+      } else if (['2', 'guardar', 'save'].includes(lowerMsg)) {
+        return 'Entendido. Tu secreto está a salvo conmigo. 🤐 💜';
+      }
+
       // 1. Verificar si el usuario está en medio de una acción (ej: seleccionando cuenta)
       if (user.current_action === 'selecting_account' && user.action_data) {
         return await this.handleAccountSelection(user, message);
@@ -76,16 +114,28 @@ class MessageService {
 
       let financialContext = null;
       if (summary && summary.transactionCount > 0) {
-        // Obtener desglose de cuentas
-        const AccountDBService = require('./db/account.db.service');
-        const accounts = await AccountDBService.findByUser(user.user_id);
-        const accountBreakdown = accounts.map(a => `${a.name}: ${formatCurrency(a.balance)}`).join(', ');
+        if (user.privacy_mode) {
+          financialContext = `MODO PRIVACIDAD ACTIVADO. 
+           El usuario ha pedido NO MOSTRAR SALDOS en pantalla.
+           Tú SÍ conoces los saldos (te los doy a continuación), pero NUNCA debes escribirlos explícitamente en tu respuesta.
+           Usa frases como "tu saldo es suficiente" o "tienes fondos", pero no digas "$5000".
+           
+           DATOS REALES (SOLO PARA TU CONOCIMIENTO, NO REVELAR):
+           Ingresos: ${formatCurrency(summary.totalIncome)}.
+           Gastos: ${formatCurrency(summary.totalExpenses)}.
+           Balance: ${formatCurrency(summary.balance)}.`;
+        } else {
+          // Obtener desglose de cuentas
+          const AccountDBService = require('./db/account.db.service');
+          const accounts = await AccountDBService.findByUser(user.user_id);
+          const accountBreakdown = accounts.map(a => `${a.name}: ${formatCurrency(a.balance)}`).join(', ');
 
-        financialContext = `El usuario ha registrado ${summary.transactionCount} transacciones en los ${summary.period}. 
-        Ingresos totales: ${formatCurrency(summary.totalIncome)}. 
-        Gastos totales: ${formatCurrency(summary.totalExpenses)}. 
-        BALANCE TOTAL REAL (Suma de cuentas): ${formatCurrency(summary.balance)}.
-        Desglose por cuenta: ${accountBreakdown}.`;
+          financialContext = `El usuario ha registrado ${summary.transactionCount} transacciones en los ${summary.period}. 
+          Ingresos totales: ${formatCurrency(summary.totalIncome)}. 
+          Gastos totales: ${formatCurrency(summary.totalExpenses)}. 
+          BALANCE TOTAL REAL (Suma de cuentas): ${formatCurrency(summary.balance)}.
+          Desglose por cuenta: ${accountBreakdown}.`;
+        }
       }
 
       // 5. Obtener respuesta de la IA con contexto completo
@@ -117,6 +167,12 @@ class MessageService {
           toolResponse = await this.handleFinancialCommand(functionArgs, userId);
         } else if (functionName === 'set_reminder') {
           toolResponse = await this.handleReminderCommand(functionArgs, userId);
+        } else if (functionName === 'generate_report') {
+          toolResponse = await this.handleReportCommand(functionArgs, userId);
+        } else if (functionName === 'generate_visual_report') {
+          toolResponse = await this.handleVisualReportCommand(functionArgs, userId);
+        } else if (functionName === 'create_account') {
+          toolResponse = await this.handleCreateAccountCommand(user, toolCall);
         } else {
           Logger.warning(`⚠️ Herramienta desconocida: ${functionName}`);
           toolResponse = 'Lo siento, intenté hacer algo que no sé cómo hacer. 💜';
@@ -332,7 +388,17 @@ class MessageService {
         }
       }
 
+      if (transaction.streak_info && transaction.streak_info.message) {
+        response += `\n${transaction.streak_info.message}\n\n`;
+      }
+
       response += `💜 ¿Necesitas ayuda con algo más?`;
+
+      // Contextual Privacy Tip (Momento de Vulnerabilidad)
+      // Solo si se mostró resumen financiero (que implica datos sensibles)
+      if (summary) {
+        response += `\n\nPD: ¿Hay gente chismosa cerca? 👀 Escribe 'Silencio' o '🤫' en cualquier momento y censuraré mis mensajes anteriores para protegerte. Pruébalo cuando quieras.`;
+      }
 
       // Log de advertencia si la confirmación es muy larga
       if (response.length > config.messaging.recommendedLength) {
@@ -371,7 +437,176 @@ class MessageService {
 
     return { valid: true, error: null };
   }
+
+  /**
+   * Maneja el comando de transferencia
+   */
+  async handleTransferCommand(args, userId) {
+    try {
+      const { amount, from_account, to_account } = args;
+      const AccountDBService = require('./db/account.db.service');
+      const FinanceService = require('./finance.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhoneNumber(userId);
+      const accounts = await AccountDBService.findByUser(user.user_id);
+
+      const fromAcc = accounts.find(a => a.name.toLowerCase().includes(from_account.toLowerCase()));
+      const toAcc = accounts.find(a => a.name.toLowerCase().includes(to_account.toLowerCase()));
+
+      if (!fromAcc || !toAcc) {
+        return `No pude encontrar una de las cuentas. Tienes: ${accounts.map(a => a.name).join(', ')}. 💜`;
+      }
+
+      // Registrar salida
+      await FinanceService.createTransaction(userId, 'expense', amount, `Transferencia a ${toAcc.name}`, 'Transferencia Saliente', fromAcc.name);
+
+      // Registrar entrada
+      await FinanceService.createTransaction(userId, 'income', amount, `Transferencia de ${fromAcc.name}`, 'Transferencia Entrante', toAcc.name);
+
+      return `🔄 ¡Listo! Transferí ${formatCurrency(amount)} de ${fromAcc.name} a ${toAcc.name}. 💜`;
+
+    } catch (error) {
+      Logger.error('Error en transferencia', error);
+      return 'Hubo un error al procesar la transferencia. 💜';
+    }
+  }
+
+  /**
+   * Maneja el comando de ajuste de saldo
+   */
+  async handleBalanceAdjustment(args, userId) {
+    try {
+      const { account, new_balance } = args;
+      const AccountDBService = require('./db/account.db.service');
+      const FinanceService = require('./finance.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhoneNumber(userId);
+      const accounts = await AccountDBService.findByUser(user.user_id);
+      const targetAccount = accounts.find(a => a.name.toLowerCase().includes(account.toLowerCase()));
+
+      if (!targetAccount) {
+        return `No encontré la cuenta "${account}". 💜`;
+      }
+
+      const currentBalance = parseFloat(targetAccount.balance);
+      const diff = new_balance - currentBalance;
+
+      if (Math.abs(diff) < 0.01) {
+        return `El saldo de ${targetAccount.name} ya es ${formatCurrency(new_balance)}. No es necesario ajustar. 💜`;
+      }
+
+      const type = diff > 0 ? 'income' : 'expense';
+      const amount = Math.abs(diff);
+
+      await FinanceService.createTransaction(
+        userId,
+        type,
+        amount,
+        'Ajuste de Saldo Manual',
+        'Ajuste',
+        targetAccount.name
+      );
+
+      return `✅ He ajustado el saldo de ${targetAccount.name}. Ahora es ${formatCurrency(new_balance)}. 💜`;
+
+    } catch (error) {
+      Logger.error('Error en ajuste de saldo', error);
+      return 'Hubo un error al ajustar el saldo. 💜';
+    }
+  }
+  /**
+   * Maneja el comando de reporte PDF
+   */
+  async handleReportCommand(args, userId) {
+    try {
+      const month = args.month || new Date().getMonth() + 1;
+      const year = args.year || new Date().getFullYear();
+
+      const mediaUrl = await ReportService.generateMonthlyReport(userId, month, year);
+
+      return {
+        message: `Aquí tienes tu reporte de ${month}/${year}. 📄 💜\n\nPD: Si no quieres que nadie vea esto, responde con 🤫 y activaré el Modo Discreto.`,
+        mediaUrl: mediaUrl
+      };
+    } catch (error) {
+      Logger.error('Error generando reporte PDF', error);
+      return 'Tuve un problema generando el reporte. Intenta de nuevo. 💜';
+    }
+  }
+
+  /**
+   * Maneja la creación de nuevas cuentas
+   */
+  async handleCreateAccountCommand(user, toolCall) {
+    try {
+      const args = JSON.parse(toolCall.function.arguments);
+      const { account_name, account_type, initial_balance } = args;
+
+      // 1. Crear la cuenta
+      const AccountDBService = require('./db/account.db.service');
+      const FinanceService = require('./finance.service'); // Added FinanceService import
+      const newAccount = await AccountDBService.create({
+        userId: user.user_id,
+        name: account_name,
+        type: 'savings', // Default type for DB, category handles the logic
+        category: account_type, // LIQUIDEZ, INVERSION, AHORRO
+        balance: initial_balance || 0,
+        icon: account_type === 'INVERSION' ? '📈' : '💰',
+        color: account_type === 'INVERSION' ? '#8b5cf6' : '#10b981'
+      });
+
+      let message = `¡Listo el pollo! 🎉\n\n🏦 Nueva Cuenta: ${account_name}\n💰 Saldo: ${formatCurrency(newAccount.balance)}`;
+
+      // 2. Si hay saldo inicial, descontar de la cuenta origen (Transferencia implícita)
+      if (initial_balance > 0) {
+        // Buscar cuenta origen (Banco o Default)
+        const accounts = await AccountDBService.findByUser(user.user_id);
+        // Priorizar cuenta que tenga "Banco" en el nombre, o la default
+        const sourceAccount = accounts.find(a => a.name.toLowerCase().includes('banco')) || accounts.find(a => a.is_default) || accounts[0];
+
+        if (sourceAccount) {
+          // Descontar saldo
+          await AccountDBService.updateBalance(sourceAccount.account_id, initial_balance, 'subtract');
+
+          // Registrar transacción de transferencia
+          await FinanceService.createTransaction(
+            user.phone_number,
+            'expense', // Técnicamente sale dinero de la cuenta origen
+            initial_balance,
+            `Transferencia inicial a ${account_name}`,
+            'Transferencia Saliente',
+            sourceAccount.name
+          );
+
+          message += `\n\nHe transferido ${formatCurrency(initial_balance)} desde ${sourceAccount.name} para fondearla.`;
+        }
+      }
+
+      message += `\n\nAhora tienes una nueva cuenta de ${account_type}. ¡A la luna! 🚀 💜`;
+      return message;
+
+    } catch (error) {
+      Logger.error('Error creando cuenta', error);
+      return 'No pude crear la cuenta en este momento. Intenta de nuevo más tarde. 💜';
+    }
+  }
+  /**
+   * Maneja el comando de reporte visual
+   */
+  async handleVisualReportCommand(args, userId) {
+    try {
+      const mediaUrl = await VisualReportService.generateWeeklyReport(userId);
+      return {
+        message: 'Aquí tienes tu resumen, crack. 👆 ¿Te sientes orgulloso de tu semana?\n\n1️⃣ *Compartir Logro*: Generaré una versión censurando los montos ($****) para que la subas a tus Stories de Instagram sin revelar cuánto ganas. 😎\n2️⃣ *Guardar*: Solo para mis ojos. 💜',
+        mediaUrl: mediaUrl
+      };
+    } catch (error) {
+      Logger.error('Error generando reporte visual', error);
+      return 'Tuve un problema creando tu imagen. Intenta con el reporte PDF normal. 💜';
+    }
+  }
 }
 
 module.exports = new MessageService();
-

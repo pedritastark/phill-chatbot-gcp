@@ -30,6 +30,22 @@ class TwiMLHelper {
   }
 
   /**
+   * Genera una respuesta TwiML con un archivo multimedia (PDF, imagen, etc.)
+   * @param {string} message - El mensaje de texto opcional
+   * @param {string} mediaUrl - URL del archivo multimedia
+   * @returns {string} - XML TwiML
+   */
+  static generateMediaResponse(message, mediaUrl) {
+    const twiml = new twilio.twiml.MessagingResponse();
+    const msg = twiml.message();
+    if (message) {
+      msg.body(message);
+    }
+    msg.media(mediaUrl);
+    return twiml.toString();
+  }
+
+  /**
    * Divide un mensaje largo en partes más pequeñas respetando el límite de caracteres
    * La división intenta mantener la coherencia del texto dividiendo por párrafos y oraciones
    * @param {string} message - El mensaje original
@@ -70,7 +86,7 @@ class TwiMLHelper {
         // Si el párrafo solo es muy largo, dividirlo por oraciones
         if (paragraph.length > safeMaxLength) {
           const sentences = this._splitByPeriods(paragraph);
-          
+
           for (const sentence of sentences) {
             if ((currentChunk + sentence).length <= safeMaxLength) {
               currentChunk += sentence;
@@ -78,7 +94,7 @@ class TwiMLHelper {
               if (currentChunk.trim()) {
                 chunks.push(currentChunk.trim());
               }
-              
+
               // Si incluso una oración es muy larga, dividirla por palabras
               if (sentence.length > safeMaxLength) {
                 const wordChunks = this._splitByWords(sentence, safeMaxLength);
@@ -112,7 +128,7 @@ class TwiMLHelper {
     if (config.messaging.showContinuationMarkers) {
       return this._addContinuationMarkers(chunks);
     }
-    
+
     return chunks;
   }
 
@@ -125,7 +141,7 @@ class TwiMLHelper {
   static _splitByPeriods(text) {
     // Dividir por puntos, signos de interrogación y exclamación
     const sentences = text.match(/[^.!?]+[.!?]+[\s]*/g);
-    
+
     if (!sentences) {
       return [text];
     }
@@ -226,7 +242,7 @@ class TwiMLHelper {
    */
   static generateSmartResponse(message) {
     const messageLength = message.length;
-    
+
     // Log de advertencia si el mensaje se acerca al límite recomendado
     if (messageLength > config.messaging.recommendedLength) {
       Logger.warning(`⚠️  Mensaje largo detectado: ${messageLength} caracteres (recomendado: ${config.messaging.recommendedLength})`);
@@ -239,12 +255,12 @@ class TwiMLHelper {
     }
 
     const chunks = this.splitMessage(message);
-    
+
     if (chunks.length === 1) {
       Logger.debug(`✅ Mensaje dentro del límite: ${messageLength} caracteres`);
       return this.generateResponse(message);
     }
-    
+
     Logger.success(`✅ Mensaje dividido exitosamente en ${chunks.length} partes`);
     return this.generateMultipleResponses(chunks);
   }

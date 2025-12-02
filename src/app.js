@@ -19,6 +19,10 @@ function createApp() {
     next();
   });
 
+  // Servir archivos estáticos (para reportes PDF)
+  const path = require('path');
+  app.use('/public', express.static(path.join(__dirname, '../public')));
+
   // Rutas
   app.get('/health', webhookController.healthCheck.bind(webhookController));
   app.post('/webhook', webhookController.handleWhatsAppMessage.bind(webhookController));

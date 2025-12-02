@@ -40,9 +40,9 @@ class WebhookController {
       // Análisis de longitud de respuesta
       const responseLength = response.length;
       const safeLimit = config.messaging.maxLength - config.messaging.safetyMargin;
-      
+
       Logger.info(`📏 Longitud de respuesta: ${responseLength} caracteres`);
-      
+
       // Logs de diagnóstico según el tamaño
       if (responseLength <= config.messaging.recommendedLength) {
         Logger.success(`✅ Mensaje dentro del límite recomendado (${config.messaging.recommendedLength} caracteres)`);
@@ -55,16 +55,24 @@ class WebhookController {
       }
 
       // Generar respuesta TwiML inteligente (divide automáticamente si es necesario)
-      const twiml = TwiMLHelper.generateSmartResponse(response);
-      
+      let twiml;
+      if (typeof response === 'object' && response.mediaUrl) {
+        // Es una respuesta con multimedia
+        twiml = TwiMLHelper.generateMediaResponse(response.message, response.mediaUrl);
+      } else {
+        // Es una respuesta de texto normal
+        twiml = TwiMLHelper.generateSmartResponse(response);
+      }
+
       Logger.response('✉️  Respuesta enviada exitosamente');
-      Logger.info(`Preview: "${response.substring(0, 100)}${response.length > 100 ? '...' : ''}"`);
-      
+      const logMsg = typeof response === 'object' ? response.message : response;
+      Logger.info(`Preview: "${logMsg.substring(0, 100)}${logMsg.length > 100 ? '...' : ''}"`);
+
       return res.type('text/xml').send(twiml);
 
     } catch (error) {
       Logger.error('Error en el webhook', error);
-      
+
       const twiml = TwiMLHelper.generateErrorResponse();
       return res.type('text/xml').send(twiml);
     }

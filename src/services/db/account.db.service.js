@@ -112,8 +112,9 @@ class AccountDBService {
           account_number_last4,
           color,
           icon,
-          is_default
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          is_default,
+          category
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           userId,
@@ -127,6 +128,7 @@ class AccountDBService {
           color || '#6366f1',
           icon || 'bank',
           isDefault || false,
+          accountData.category || 'LIQUIDEZ'
         ]
       );
 
@@ -169,6 +171,7 @@ class AccountDBService {
           color = COALESCE($8, color),
           icon = COALESCE($9, icon),
           is_default = COALESCE($10, is_default),
+          category = COALESCE($11, category),
           updated_at = CURRENT_TIMESTAMP
          WHERE account_id = $1 AND is_active = true
          RETURNING *`,
@@ -183,6 +186,7 @@ class AccountDBService {
           color,
           icon,
           isDefault,
+          updateData.category
         ]
       );
 
@@ -207,7 +211,7 @@ class AccountDBService {
   async updateBalance(accountId, amount, operation = 'add') {
     try {
       const operator = operation === 'add' ? '+' : '-';
-      
+
       await query(
         `UPDATE accounts 
          SET balance = balance ${operator} $2,
