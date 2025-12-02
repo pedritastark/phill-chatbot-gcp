@@ -54,10 +54,23 @@ class MessageService {
       // 0.1. Comando de Emergencia para Reiniciar Onboarding
       if (message.toLowerCase().trim() === '/reset') {
         Logger.warning(`⚠️ Usuario ${userId} solicitó reset manual.`);
-        await UserDBService.deactivateUser(userId); // Soft delete or hard delete?
-        // Hard delete for clean start
+
+        // Hard delete for clean start directly by phone number
         const { query } = require('../config/database');
-        await query('DELETE FROM users WHERE phone_number = $1', [userId]);
+        // Primero eliminar dependencias para evitar violaciones de foreign key
+        // Necesitamos el user_id para borrar las dependencias
+        const userToDelete = await UserDBService.findByPhoneNumber(userId);
+
+        if (userToDelete) {
+          const uuid = userToDelete.user_id;
+          await query('DELETE FROM transactions WHERE user_id = $1', [uuid]);
+          await query('DELETE FROM reminders WHERE user_id = $1', [uuid]);
+          await query('DELETE FROM accounts WHERE user_id = $1', [uuid]);
+          await query('DELETE FROM categories WHERE user_id = $1', [uuid]);
+          await query('DELETE FROM conversations WHERE user_id = $1', [uuid]);
+          await query('DELETE FROM users WHERE user_id = $1', [uuid]);
+        }
+
         return "🔄 He reiniciado tu cuenta. Escribe 'Hola' para comenzar de nuevo. 💜";
       }
 
