@@ -104,7 +104,6 @@ CREATE TABLE accounts (
     
     -- Constraints
     CONSTRAINT chk_account_type CHECK (type IN ('savings', 'checking', 'credit_card', 'cash', 'investment')),
-    CONSTRAINT chk_balance CHECK (balance IS NULL OR balance >= 0),
     CONSTRAINT chk_credit_limit CHECK (credit_limit IS NULL OR credit_limit >= 0)
 );
 

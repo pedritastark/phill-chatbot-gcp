@@ -41,6 +41,17 @@ const config = {
     // Mostrar indicadores de continuación en mensajes divididos
     showContinuationMarkers: process.env.SHOW_CONTINUATION_MARKERS !== 'false',
   },
+
+  // Rate Limiting & Security
+  security: {
+    // Máximo de mensajes por ventana de tiempo (spam protection)
+    rateLimitWindowMs: 2000, // 2 segundos
+    // Límite diario de mensajes por usuario (cost control)
+    dailyMessageLimit: parseInt(process.env.DAILY_MESSAGE_LIMIT) || 50,
+  },
+
+  // Modo Mantenimiento
+  maintenanceMode: true, // Forzar modo mantenimiento
 };
 
 /**

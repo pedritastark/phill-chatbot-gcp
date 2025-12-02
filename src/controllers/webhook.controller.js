@@ -1,4 +1,5 @@
 const MessageService = require('../services/message.service');
+const RateLimitService = require('../services/rate.limit.service');
 const TwiMLHelper = require('../utils/twiml');
 const Logger = require('../utils/logger');
 const { config } = require('../config/environment');
@@ -25,6 +26,26 @@ class WebhookController {
       Logger.user(`Para: ${to}`);
       Logger.info(`Mensaje: "${message}"`);
       Logger.info(`Longitud: ${message.length} caracteres`);
+
+      // 0. Modo Mantenimiento (Sleep Mode)
+      if (config.maintenanceMode) {
+        const maintenanceMsg = "🚧 En este momento el jefe está trabajando en el proyecto. Mándale un DM si necesitas algo urgente. 💜";
+        const twiml = TwiMLHelper.generateSmartResponse(maintenanceMsg);
+        return res.type('text/xml').send(twiml);
+      }
+
+      // 0.1. Verificar Rate Limits & Seguridad
+      const limitCheck = RateLimitService.checkLimit(from);
+      if (!limitCheck.allowed) {
+        let reply = '';
+        if (limitCheck.reason === 'rate_limit') {
+          reply = '¡Epa! Vas muy rápido. 🏎️ Déjame pensar un segundo. ✋';
+        } else if (limitCheck.reason === 'daily_limit') {
+          reply = 'Has alcanzado tu límite diario de mensajes. 🌙 ¡Hablamos mañana! (O contacta soporte si es urgente). 💜';
+        }
+        const twiml = TwiMLHelper.generateSmartResponse(reply);
+        return res.type('text/xml').send(twiml);
+      }
 
       // Validar el mensaje
       const validation = MessageService.validateMessage(message);
