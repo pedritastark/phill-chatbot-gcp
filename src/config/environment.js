@@ -28,6 +28,8 @@ const config = {
 
   // Límites de mensajes para WhatsApp Business API
   messaging: {
+    provider: process.env.MESSAGING_PROVIDER || 'twilio',
+    adminPhoneNumber: process.env.ADMIN_PHONE_NUMBER || '+573218372110',
     // Límite oficial para agentes de IA en WhatsApp
     maxLength: parseInt(process.env.MESSAGE_MAX_LENGTH) || 1024,
     // Margen de seguridad para evitar truncamientos inesperados

@@ -42,6 +42,14 @@ class MessageService {
       // 0. Verificar usuario y onboarding
       const UserDBService = require('./db/user.db.service');
       const OnboardingService = require('./onboarding.service');
+      const AdminService = require('./admin.service');
+
+      // 0.0. Verificar Comandos de Admin (God Mode)
+      // Esto va PRIMERO para que el admin pueda chequear status incluso si no está registrado o en onboarding
+      const adminResponse = await AdminService.handleCommand(message, userId);
+      if (adminResponse) {
+        return adminResponse;
+      }
 
       let user = await UserDBService.findByPhoneNumber(userId);
 
