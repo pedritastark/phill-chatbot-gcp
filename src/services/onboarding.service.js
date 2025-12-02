@@ -80,6 +80,12 @@ class OnboardingService {
     async handleCashBalanceStep(user, message) {
         const amount = this.parseAmount(message);
 
+        // Validación: Si es 0 y el mensaje no parece ser explícitamente "cero" o "nada"
+        const isExplicitZero = ['0', 'cero', 'nada', 'ninguno'].some(w => message.toLowerCase().includes(w));
+        if (amount === 0 && !isExplicitZero) {
+            return "Mmm, no entendí ese número. 🤔 ¿Podrías escribirme solo la cifra? Por ejemplo: '50.000' o '100k'.";
+        }
+
         // Guardar dato temporalmente
         const data = user.onboarding_data || {};
         data.cash = amount;
@@ -97,6 +103,12 @@ class OnboardingService {
      */
     async handleBankBalanceStep(user, message) {
         const amount = this.parseAmount(message);
+
+        const isExplicitZero = ['0', 'cero', 'nada', 'ninguno'].some(w => message.toLowerCase().includes(w));
+        if (amount === 0 && !isExplicitZero) {
+            return "No capté el monto. 😅 ¿Me lo repites? Ej: '2m' (2 millones) o '500.000'.";
+        }
+
         const data = user.onboarding_data || {};
         const cashBalance = data.cash || 0;
 
@@ -135,10 +147,16 @@ class OnboardingService {
      * Paso 3: Recibe primer gasto -> Detecta datos -> Pide cuenta
      */
     async handleFirstExpenseStep(user, message) {
-        // Usar lógica simple de parsing o llamar a FinanceService si es posible
-        // Aquí simularemos una detección básica para el onboarding
+        // Usar parseAmount mejorado para extraer el monto
         const amount = this.parseAmount(message);
-        const description = message; // Usar todo el mensaje como descripción
+
+        if (amount === 0) {
+            return "No logré identificar el monto del gasto. 🧐 Intenta de nuevo, por ejemplo: '10k en taxi' o 'Almuerzo 15.000'.";
+        }
+
+        // Descripción: Todo el mensaje, o intentar limpiarlo un poco
+        // Para MVP, usar todo el mensaje está bien, el usuario suele ser descriptivo
+        const description = message;
 
         // Guardar datos del gasto pendiente
         await UserDBService.updateUser(user.phone_number, {
@@ -239,8 +257,40 @@ class OnboardingService {
      * Extrae un número de un mensaje
      */
     parseAmount(text) {
-        const clean = text.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.]/g, '');
-        return parseFloat(clean) || 0;
+        if (!text) return 0;
+
+        let clean = text.toLowerCase().trim();
+        let multiplier = 1;
+
+        if (clean.includes('k')) multiplier = 1000;
+        else if (clean.includes('m')) multiplier = 1000000;
+        else if (clean.includes('barra') || clean.includes('luca')) multiplier = 1000;
+
+        // Eliminar letras y dejar solo números, puntos y comas
+        clean = clean.replace(/[^\d.,]/g, '');
+
+        // Normalizar separadores
+        // Caso 1: Tiene coma y punto (ej: 1.500,50) -> Formato CO/EU
+        if (clean.includes('.') && clean.includes(',')) {
+            clean = clean.replace(/\./g, '').replace(',', '.');
+        }
+        // Caso 2: Solo tiene coma (ej: 1500,50) -> Decimal CO/EU
+        else if (clean.includes(',')) {
+            clean = clean.replace(',', '.');
+        }
+        // Caso 3: Solo tiene punto (ej: 150.000 o 150.50) -> Ambiguo
+        else if (clean.includes('.')) {
+            const parts = clean.split('.');
+            // Si el último grupo tiene 3 dígitos (ej: 150.000), asumimos miles
+            // Si tiene 2 (ej: 150.50), asumimos decimal
+            if (parts[parts.length - 1].length === 3) {
+                clean = clean.replace(/\./g, '');
+            }
+            // Si no, dejamos el punto como decimal (JS standard)
+        }
+
+        const value = parseFloat(clean);
+        return (value || 0) * multiplier;
     }
 }
 
