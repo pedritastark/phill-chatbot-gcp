@@ -51,6 +51,16 @@ class MessageService {
         return adminResponse;
       }
 
+      // 0.1. Comando de Emergencia para Reiniciar Onboarding
+      if (message.toLowerCase().trim() === '/reset') {
+        Logger.warning(`⚠️ Usuario ${userId} solicitó reset manual.`);
+        await UserDBService.deactivateUser(userId); // Soft delete or hard delete?
+        // Hard delete for clean start
+        const { query } = require('../config/database');
+        await query('DELETE FROM users WHERE phone_number = $1', [userId]);
+        return "🔄 He reiniciado tu cuenta. Escribe 'Hola' para comenzar de nuevo. 💜";
+      }
+
       let user = await UserDBService.findByPhoneNumber(userId);
 
       // Si el usuario no existe, crearlo e iniciar onboarding
