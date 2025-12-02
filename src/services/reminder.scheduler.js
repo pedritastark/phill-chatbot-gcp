@@ -70,6 +70,36 @@ class ReminderScheduler {
             await ReminderDBService.markAsSent(reminder.reminder_id);
             Logger.success(`✅ Recordatorio enviado a ${reminder.phone_number}`);
 
+            // Si es recurrente, programar el siguiente
+            if (reminder.is_recurring) {
+                const nextDate = new Date(reminder.scheduled_at);
+
+                switch (reminder.recurrence_pattern) {
+                    case 'daily':
+                        nextDate.setDate(nextDate.getDate() + 1);
+                        break;
+                    case 'weekly':
+                        nextDate.setDate(nextDate.getDate() + 7);
+                        break;
+                    case 'monthly':
+                        nextDate.setMonth(nextDate.getMonth() + 1);
+                        break;
+                    case 'yearly':
+                        nextDate.setFullYear(nextDate.getFullYear() + 1);
+                        break;
+                }
+
+                await ReminderDBService.createReminder({
+                    userId: reminder.user_id,
+                    message: reminder.message,
+                    scheduledAt: nextDate.toISOString(),
+                    isRecurring: true,
+                    recurrencePattern: reminder.recurrence_pattern
+                });
+
+                Logger.info(`🔄 Recordatorio recurrente reprogramado para: ${nextDate.toISOString()}`);
+            }
+
         } catch (error) {
             Logger.error(`❌ Error al enviar recordatorio ${reminder.reminder_id}`, error);
             await ReminderDBService.markAsFailed(reminder.reminder_id);

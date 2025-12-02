@@ -17,7 +17,7 @@ const config = {
 
   // OpenAI
   openai: {
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: (process.env.OPENAI_API_KEY || '').trim().replace(/^['"]|['"]$/g, ''),
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   },
 

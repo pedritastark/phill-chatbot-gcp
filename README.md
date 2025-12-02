@@ -1,6 +1,6 @@
 # 💜 Phill - Asesor Financiero Personal vía WhatsApp
 
-**Phill** es un chatbot inteligente de WhatsApp que funciona como tu asesor financiero personal. Construido con Node.js, Google Gemini AI y Twilio, Phill te ayuda a:
+**Phill** es un chatbot inteligente de WhatsApp que funciona como tu asesor financiero personal. Construido con Node.js, OpenAI (GPT-4o) y Twilio, Phill te ayuda a:
 
 - 🎓 **Aprender sobre finanzas**: Explica conceptos complejos de forma simple y accesible
 - 💰 **Registrar gastos e ingresos**: Lleva control de tus finanzas directamente desde WhatsApp
@@ -15,35 +15,30 @@
 - Responde dudas en tiempo real
 - **NUNCA da consejos de inversión específicos** (solo educa)
 
-### Registro de Transacciones
-- Registra gastos: `"Gasto: $50 comida"`
-- Registra ingresos: `"Ingreso: $1000 salario"`
+### Registro de Transacciones Inteligente
+- Registra gastos: `"Gasto: $50.000 comida"`
+- Registra ingresos: `"Ingreso: $1.000.000 salario"`
+- **Selección de cuenta inteligente**: Te pregunta dónde guardar el dinero si no lo especificas
+- **Formato Colombiano**: Maneja montos en pesos colombianos (COP) con formato `$1.000.000`
 - Categorización automática
-- Resúmenes financieros personalizados
+- Resúmenes financieros personalizados basados en tu **patrimonio real** (suma de cuentas)
 
 ### Arquitectura Profesional
 ```
 src/
 ├── config/          # Configuración centralizada
 ├── controllers/     # Lógica de rutas y webhooks
-├── services/        # Lógica de negocio (IA, finanzas, mensajes)
-├── models/          # Modelos de datos
-└── utils/           # Utilidades (logger, TwiML)
+├── services/        # Lógica de negocio (IA, finanzas, mensajes, DB)
+├── utils/           # Utilidades (logger, formatter)
+└── scripts/         # Scripts de utilidad (chat local)
 ```
-
-### Manejo de Mensajes Largos
-- **División automática**: Mensajes > 1024 caracteres se dividen inteligentemente
-- **División por contexto**: Divide por párrafos → oraciones → palabras
-- **Indicadores visuales**: Emojis 📨 para mostrar continuación
-- **Configurable**: Todos los límites son ajustables
-- [📖 Ver documentación completa](./MENSAJES_LARGOS.md)
 
 ## 📋 Requisitos Previos
 
 - **Node.js** v14 o superior
 - **Cuenta de Twilio** con WhatsApp habilitado
-- **API Key de Google Gemini** ([Obtener aquí](https://makersuite.google.com/app/apikey))
-- **ngrok** (para desarrollo local)
+- **API Key de OpenAI**
+- **Base de Datos PostgreSQL**
 
 ## 🚀 Instalación Rápida
 
@@ -67,15 +62,8 @@ PORT=3001
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=tu_token_aqui
 TWILIO_PHONE_NUMBER=+14155238886
-GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxx
-GEMINI_MODEL=gemini-2.0-flash-exp
-
-# Configuración opcional de mensajes (valores predeterminados)
-MESSAGE_MAX_LENGTH=1024
-MESSAGE_SAFETY_MARGIN=50
-MESSAGE_RECOMMENDED_LENGTH=900
-ENABLE_AUTO_SPLIT=true
-SHOW_CONTINUATION_MARKERS=true
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxx
+DATABASE_URL=postgresql://user:password@host:port/dbname
 ```
 
 ### 3. Iniciar el servidor
@@ -88,31 +76,13 @@ SHOW_CONTINUATION_MARKERS=true
 npm start
 ```
 
-## 🔧 Configuración de Twilio
+## 💬 Chat Local (Testing)
 
-### Paso 1: Exponer tu servidor local
+Puedes probar el chatbot directamente en tu terminal sin necesidad de Twilio o WhatsApp:
 
 ```bash
-ngrok http 3001
+node scripts/local_chat.js
 ```
-
-Copia la URL HTTPS que ngrok te proporciona (ej: `https://abc123.ngrok.io`)
-
-### Paso 2: Configurar el webhook en Twilio
-
-1. Ve a [Twilio Console](https://console.twilio.com/)
-2. Navega a **Messaging** → **Try it out** → **Send a WhatsApp message**
-3. En la configuración del webhook, ingresa:
-   ```
-   https://tu-url-ngrok.ngrok.io/webhook
-   ```
-4. Guarda los cambios
-
-### Paso 3: Conectar tu WhatsApp
-
-1. Twilio te dará un código (ej: `join example-123`)
-2. Envía ese código al número de WhatsApp Sandbox de Twilio
-3. ¡Listo! Ya puedes hablar con Phill
 
 ## 💬 Cómo Usar Phill
 
@@ -127,17 +97,15 @@ Copia la URL HTTPS que ngrok te proporciona (ej: `https://abc123.ngrok.io`)
 ### Registrar gastos
 
 ```
-"Gasto: $50 comida"
-"Gasté $200 en transporte"
-"Registrar gasto: $30 café"
+"Gaste 50.000 en comida"
+"Pague 200.000 de arriendo"
 ```
 
 ### Registrar ingresos
 
 ```
-"Ingreso: $1000 salario"
-"Recibí $50 propina"
-"Registrar ingreso: $200 freelance"
+"Me pagaron 1.000.000 de salario"
+"Recibí 50.000 de regalo"
 ```
 
 ### Ver tu resumen
@@ -145,7 +113,7 @@ Copia la URL HTTPS que ngrok te proporciona (ej: `https://abc123.ngrok.io`)
 Cada vez que registres una transacción, Phill te mostrará:
 - Total de ingresos (últimos 30 días)
 - Total de gastos (últimos 30 días)
-- Balance actual
+- **Balance Real**: La suma total de dinero en tus cuentas
 - Insights personalizados
 
 ## 🏗️ Arquitectura
@@ -153,268 +121,35 @@ Cada vez que registres una transacción, Phill te mostrará:
 ### Flujo de Datos
 
 ```
-Usuario → WhatsApp → Twilio → Webhook → Phill → Gemini AI → Respuesta
-                                  ↓
-                            Base de Datos
-                          (JSON / Transacciones)
+Usuario → WhatsApp → Twilio → Webhook → Phill → OpenAI → Respuesta
+                                   ↓
+                             Base de Datos
+                             (PostgreSQL)
 ```
 
 ### Componentes Principales
 
-#### 1. **Webhook Controller** (`src/controllers/webhook.controller.js`)
-- Recibe mensajes de Twilio
-- Valida y extrae información
-- Coordina la respuesta
-
-#### 2. **Message Service** (`src/services/message.service.js`)
+#### 1. **Message Service** (`src/services/message.service.js`)
 - Procesa el mensaje del usuario
 - Detecta comandos financieros
 - Coordina con IA y finanzas
 
-#### 3. **AI Service** (`src/services/ai.service.js`)
-- Se comunica con Google Gemini
-- Gestiona el prompt del sistema
-- Detecta comandos de registro
+#### 2. **AI Service** (`src/services/ai.service.js`)
+- Se comunica con OpenAI
+- Gestiona el prompt del sistema y las herramientas (Function Calling)
+- Detecta intenciones de usuario
 
-#### 4. **Finance Service** (`src/services/finance.service.js`)
+#### 3. **Finance Service** (`src/services/finance.service.js`)
 - Gestiona transacciones (gastos/ingresos)
 - Genera resúmenes financieros
 - Categoriza automáticamente
 
-#### 5. **Models** (`src/models/`)
-- `Transaction`: Modelo de transacciones
-- `User`: Modelo de usuarios
-
-## 📊 Almacenamiento de Datos
-
-Los datos se guardan en archivos JSON en la carpeta `data/`:
-
-```
-data/
-└── transactions.json    # Todas las transacciones de usuarios
-```
-
-**Formato de transacciones:**
-```json
-{
-  "transactions": [
-    {
-      "id": "1699123456789",
-      "userId": "whatsapp:+5215512345678",
-      "type": "expense",
-      "amount": 50.00,
-      "category": "comida",
-      "description": "comida",
-      "date": "2024-01-15T10:30:00.000Z",
-      "createdAt": "2024-01-15T10:30:00.000Z"
-    }
-  ]
-}
-```
-
-## 🔍 Endpoints
-
-### `POST /webhook`
-Endpoint principal del webhook de WhatsApp
-
-**Request (de Twilio):**
-```
-Body: "¿Qué es un ETF?"
-From: whatsapp:+5215512345678
-To: whatsapp:+14155238886
-```
-
-**Response (TwiML):**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>¡Hola! Un ETF es como una canasta...</Message>
-</Response>
-```
-
-### `GET /health`
-Verifica que el servidor esté funcionando
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "message": "Phill WhatsApp Bot is running",
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
-
-## 🧪 Testing
-
-### Test de división de mensajes
-
-Prueba el sistema de manejo de mensajes largos:
-
-```bash
-npm run test:messages
-```
-
-Este script prueba:
-- ✅ Mensajes cortos (< 900 caracteres)
-- ✅ Mensajes medios (~500 caracteres)
-- ✅ Mensajes largos (~1200 caracteres)
-- ✅ Mensajes muy largos (> 4000 caracteres)
-
-### Test local con curl
-
-```bash
-# Health check
-curl http://localhost:3001/health
-
-# Simular mensaje de Twilio
-curl -X POST http://localhost:3001/webhook \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "Body=¿Qué es un ETF?&From=whatsapp:+5215512345678&To=whatsapp:+14155238886"
-```
-
-### Test con WhatsApp real
-
-1. Configura ngrok y Twilio
-2. Envía un mensaje al número de Sandbox
-3. Verifica los logs en la terminal
-4. Recibe la respuesta en WhatsApp
-
-### Casos de prueba sugeridos
-
-✅ **Educación:**
-- "¿Qué es el interés compuesto?"
-- "Explícame qué son los ETFs"
-- "¿Cómo hago un presupuesto?"
-
-✅ **Registro de gastos:**
-- "Gasto: $50 comida"
-- "Gasté $200 en uber"
-
-✅ **Registro de ingresos:**
-- "Ingreso: $1000 salario"
-- "Recibí $50 propina"
-
-## 📝 Logs
-
-Phill usa un sistema de logging con emojis para facilitar el debugging:
-
-- 📥 Request recibido
-- 👤 Información del usuario
-- 📨 Mensaje procesado
-- 🤖 Consulta a IA
-- 💰 Operación financiera
-- ✅ Operación exitosa
-- ⚠️ Advertencia
-- ❌ Error
-
-**Ver logs en tiempo real:**
-```bash
-npm start
-```
-
-## 🎨 Personalización
-
-### Cambiar la personalidad de Phill
-
-Edita el prompt del sistema en `src/services/ai.service.js`:
-
-```javascript
-getSystemPrompt() {
-  return `Eres Phill, un asesor financiero personal...`;
-}
-```
-
-### Agregar nuevas categorías
-
-Edita `categorizeTransaction()` en `src/services/finance.service.js`:
-
-```javascript
-const categories = {
-  tuCategoria: ['palabra1', 'palabra2'],
-  // ...
-};
-```
-
-### Cambiar el modelo de IA
-
-Edita `.env`:
-```env
-GEMINI_MODEL=gemini-1.5-pro
-```
-
-Modelos disponibles:
-- `gemini-2.0-flash-exp` (recomendado, rápido)
-- `gemini-1.5-pro` (más potente)
-- `gemini-1.5-flash` (balance)
-
-## 🚀 Despliegue a Producción
-
-### Opciones recomendadas:
-
-1. **Railway** (recomendado)
-   - Deploy automático desde GitHub
-   - Variables de entorno fáciles
-   - Dominio HTTPS incluido
-
-2. **Heroku**
-   - `git push heroku main`
-   - Add-ons disponibles
-
-3. **DigitalOcean**
-   - VPS con control total
-   - Configuración manual
-
-4. **Google Cloud Run**
-   - Serverless
-   - Escala automáticamente
-
-### Checklist para producción:
-
-- ✅ Configurar `NODE_ENV=production`
-- ✅ Usar dominio HTTPS permanente
-- ✅ Configurar webhook en Twilio con URL de producción
-- ✅ Implementar backup de datos
-- ✅ Configurar monitoreo (opcional)
-- ✅ Implementar rate limiting (opcional)
-
-## 🔒 Seguridad
-
-### Variables de entorno
-- ✅ Nunca subas tu archivo `.env` a git
-- ✅ Usa `.gitignore` para excluir archivos sensibles
-- ✅ Rota tus API keys periódicamente
-
-### Validación de Twilio (Producción)
-Para producción, valida que los requests vengan de Twilio:
-
-```javascript
-const twilio = require('twilio');
-
-app.use('/webhook', (req, res, next) => {
-  const signature = req.headers['x-twilio-signature'];
-  const valid = twilio.validateRequest(
-    process.env.TWILIO_AUTH_TOKEN,
-    signature,
-    `${req.protocol}://${req.get('host')}${req.originalUrl}`,
-    req.body
-  );
-  
-  if (!valid) {
-    return res.status(403).send('Forbidden');
-  }
-  next();
-});
-```
+#### 4. **Database Services** (`src/services/db/`)
+- Capa de acceso a datos para Usuarios, Cuentas, Transacciones, etc.
 
 ## 🤝 Contribuir
 
-Este proyecto es open source y las contribuciones son bienvenidas:
-
-1. Fork el proyecto
-2. Crea una rama: `git checkout -b feature/nueva-funcionalidad`
-3. Commit: `git commit -m 'Agrega nueva funcionalidad'`
-4. Push: `git push origin feature/nueva-funcionalidad`
-5. Abre un Pull Request
+Este proyecto es open source y las contribuciones son bienvenidas.
 
 ## 📄 Licencia
 

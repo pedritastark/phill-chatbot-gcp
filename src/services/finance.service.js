@@ -37,7 +37,19 @@ class FinanceService {
       if (accountName) {
         // Buscar cuenta específica
         const accounts = await AccountDBService.findByUser(user.user_id);
-        account = accounts.find(a => a.name.toLowerCase().includes(accountName.toLowerCase()));
+        const matchingAccounts = accounts.filter(a => a.name.toLowerCase().includes(accountName.toLowerCase()));
+
+        if (matchingAccounts.length > 0) {
+          // Si es un gasto, priorizar cuenta con saldo suficiente
+          if (type === 'expense') {
+            account = matchingAccounts.find(a => parseFloat(a.balance) >= amount);
+          }
+
+          // Si no se encontró cuenta con saldo (o es ingreso), usar la primera que coincida
+          if (!account) {
+            account = matchingAccounts[0];
+          }
+        }
 
         // Si no se encuentra, usar default pero loguear warning
         if (!account) {
@@ -121,10 +133,12 @@ class FinanceService {
 
       const summary = await TransactionDBService.getSummary(user.user_id, period);
 
+      const totalBalance = await AccountDBService.getTotalBalance(user.user_id);
+
       const result = {
         totalIncome: parseFloat(summary.total_income) || 0,
         totalExpenses: parseFloat(summary.total_expenses) || 0,
-        balance: parseFloat(summary.balance) || 0,
+        balance: totalBalance,
         transactionCount: parseInt(summary.transaction_count) || 0,
         period: `últimos ${days} días`,
         avgExpense: parseFloat(summary.avg_expense) || 0,
@@ -152,7 +166,7 @@ class FinanceService {
         return 0;
       }
 
-      return await TransactionDBService.getBalance(user.user_id);
+      return await AccountDBService.getTotalBalance(user.user_id);
     } catch (error) {
       Logger.error('Error al obtener balance del usuario', error);
       return 0;

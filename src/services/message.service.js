@@ -3,6 +3,7 @@ const FinanceService = require('./finance.service');
 const ConversationService = require('./conversation.service');
 const Logger = require('../utils/logger');
 const { config } = require('../config/environment');
+const { formatCurrency } = require('../utils/formatter');
 
 /**
  * Servicio para procesar mensajes de usuarios
@@ -62,20 +63,6 @@ class MessageService {
         return await this.handleAccountSelection(user, message);
       }
 
-      // 2. Detectar si es un comando financiero
-      const financialCommand = AIService.detectFinancialCommand(message);
-
-      if (financialCommand) {
-        // Guardar el mensaje del usuario
-        await ConversationService.addUserMessage(userId, message);
-
-        const response = await this.handleFinancialCommand(financialCommand, userId);
-
-        // Guardar la respuesta del asistente
-        await ConversationService.addAssistantMessage(userId, response);
-        return response;
-      }
-
       // 3. Obtener historial de conversación ANTES de guardar el mensaje actual
       // (últimos 10 mensajes = 5 intercambios anteriores)
       const conversationHistory = await ConversationService.getHistoryForAI(userId);
@@ -89,7 +76,16 @@ class MessageService {
 
       let financialContext = null;
       if (summary && summary.transactionCount > 0) {
-        financialContext = `El usuario ha registrado ${summary.transactionCount} transacciones en los ${summary.period}. Ingresos totales: $${summary.totalIncome.toFixed(2)}, Gastos totales: $${summary.totalExpenses.toFixed(2)}, Balance: $${summary.balance.toFixed(2)}.`;
+        // Obtener desglose de cuentas
+        const AccountDBService = require('./db/account.db.service');
+        const accounts = await AccountDBService.findByUser(user.user_id);
+        const accountBreakdown = accounts.map(a => `${a.name}: ${formatCurrency(a.balance)}`).join(', ');
+
+        financialContext = `El usuario ha registrado ${summary.transactionCount} transacciones en los ${summary.period}. 
+        Ingresos totales: ${formatCurrency(summary.totalIncome)}. 
+        Gastos totales: ${formatCurrency(summary.totalExpenses)}. 
+        BALANCE TOTAL REAL (Suma de cuentas): ${formatCurrency(summary.balance)}.
+        Desglose por cuenta: ${accountBreakdown}.`;
       }
 
       // 5. Obtener respuesta de la IA con contexto completo
@@ -99,79 +95,111 @@ class MessageService {
         userName: user.name
       });
 
-      // 6. AHORA sí, guardar el mensaje del usuario y la respuesta en el historial
+      // 6. Guardar el mensaje del usuario
       await ConversationService.addUserMessage(userId, message);
 
-      // Verificar si la respuesta es un JSON de recordatorio
-      const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
+      // 7. Verificar si hay llamadas a herramientas (Function Calling)
+      if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+        Logger.info(`🛠️ Detectadas ${aiResponse.tool_calls.length} llamadas a herramientas`);
 
-      if (jsonMatch) {
-        try {
-          const command = JSON.parse(jsonMatch[1]);
+        // Por ahora procesamos solo la primera herramienta para simplificar
+        // (OpenAI puede devolver varias, pero en este caso de uso suele ser una)
+        const toolCall = aiResponse.tool_calls[0];
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments);
 
-          if (command.type === 'reminder') {
-            const ReminderDBService = require('./db/reminder.db.service');
-            const UserDBService = require('./db/user.db.service');
+        Logger.info(`🔧 Ejecutando herramienta: ${functionName}`);
+        Logger.info(`📋 Argumentos: ${JSON.stringify(functionArgs)}`);
 
-            // Obtener UUID del usuario
-            const user = await UserDBService.getUserByPhone(userId);
+        let toolResponse = '';
 
-            if (user) {
-              // Guardar recordatorio
-              await ReminderDBService.createReminder({
-                userId: user.user_id,
-                message: command.message,
-                scheduledAt: command.datetime
-              });
-
-              // Respuesta de confirmación
-              const dateObj = new Date(command.datetime);
-              const dateStr = dateObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
-              const timeStr = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
-
-              const confirmation = `✅ ¡Hecho! Te recordaré "${command.message}" el ${dateStr} a las ${timeStr}. 💜`;
-
-              await ConversationService.addAssistantMessage(userId, confirmation);
-              return confirmation;
-            } else {
-              Logger.error(`Usuario no encontrado para recordatorio: ${userId}`);
-              // If user not found, we can't create the reminder.
-              // Return a generic error or the original AI response (cleaned).
-              const cleanResponse = aiResponse.replace(/```json[\s\S]*```/, '').trim() || 'Entendido, pero tuve un problema técnico procesando el recordatorio porque no pude encontrar tu información de usuario. 💜';
-              await ConversationService.addAssistantMessage(userId, cleanResponse);
-              return cleanResponse;
-            }
-          }
-        } catch (e) {
-          Logger.error('Error al procesar JSON de IA', e);
-          // Si falla, enviar la respuesta original limpia de bloques de código
-          const cleanResponse = aiResponse.replace(/```json[\s\S]*```/, '').trim() || 'Entendido, pero tuve un problema técnico procesando el recordatorio. 💜';
-          await ConversationService.addAssistantMessage(userId, cleanResponse);
-          return cleanResponse;
+        if (functionName === 'register_transaction') {
+          toolResponse = await this.handleFinancialCommand(functionArgs, userId);
+        } else if (functionName === 'set_reminder') {
+          toolResponse = await this.handleReminderCommand(functionArgs, userId);
+        } else {
+          Logger.warning(`⚠️ Herramienta desconocida: ${functionName}`);
+          toolResponse = 'Lo siento, intenté hacer algo que no sé cómo hacer. 💜';
         }
+
+        // Guardar la respuesta de la herramienta como mensaje del asistente
+        await ConversationService.addAssistantMessage(userId, toolResponse);
+        return toolResponse;
       }
 
-      // Respuesta normal
-      await ConversationService.addAssistantMessage(userId, aiResponse);
+      // 8. Si no hay herramientas, es una respuesta de texto normal
+      const content = aiResponse.content;
 
-      // 7. Log de advertencia si la respuesta de IA es muy larga
-      if (aiResponse.length > config.messaging.recommendedLength) {
-        Logger.warning(
-          `🚨 IA SUPERÓ EL LÍMITE: ${aiResponse.length} caracteres ` +
-          `(máximo recomendado: ${config.messaging.recommendedLength}). ` +
-          `⚠️ Esto aumenta costos operacionales. El mensaje será dividido.`
-        );
-      } else {
-        Logger.success(
-          `✅ Respuesta dentro del límite: ${aiResponse.length}/${config.messaging.recommendedLength} caracteres`
-        );
+      if (content) {
+        await ConversationService.addAssistantMessage(userId, content);
+
+        // Log de advertencia si la respuesta de IA es muy larga
+        if (content.length > config.messaging.recommendedLength) {
+          Logger.warning(
+            `🚨 IA SUPERÓ EL LÍMITE: ${content.length} caracteres ` +
+            `(máximo recomendado: ${config.messaging.recommendedLength}). ` +
+            `⚠️ Esto aumenta costos operacionales. El mensaje será dividido.`
+          );
+        } else {
+          Logger.success(
+            `✅ Respuesta dentro del límite: ${content.length}/${config.messaging.recommendedLength} caracteres`
+          );
+        }
+
+        return content;
       }
 
-      return aiResponse;
+      return '... 💜'; // Fallback por si acaso
 
     } catch (error) {
       Logger.error('Error al procesar mensaje', error);
       throw error;
+    }
+  }
+
+  /**
+   * Maneja el comando de recordatorio (Function Calling)
+   */
+  async handleReminderCommand(args, userId) {
+    try {
+      const ReminderDBService = require('./db/reminder.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      // Obtener UUID del usuario
+      const user = await UserDBService.findByPhoneNumber(userId);
+
+      if (!user) {
+        return 'No pude encontrar tu usuario para guardar el recordatorio. 💜';
+      }
+
+      // Guardar recordatorio
+      await ReminderDBService.createReminder({
+        userId: user.user_id,
+        message: args.message,
+        scheduledAt: args.datetime,
+        isRecurring: args.is_recurring || false,
+        recurrencePattern: args.recurrence_pattern || null
+      });
+
+      // Respuesta de confirmación
+      const dateObj = new Date(args.datetime);
+      const dateStr = dateObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+      const timeStr = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
+      let confirmation = `✅ ¡Hecho! Te recordaré "${args.message}" el ${dateStr} a las ${timeStr}`;
+
+      if (args.is_recurring) {
+        const patterns = { daily: 'todos los días', weekly: 'cada semana', monthly: 'cada mes', yearly: 'cada año' };
+        const patternText = patterns[args.recurrence_pattern] || 'recurrentemente';
+        confirmation += ` (${patternText})`;
+      }
+
+      confirmation += '. 💜';
+      return confirmation;
+
+    } catch (error) {
+      Logger.error('Error al crear recordatorio', error);
+      return 'Tuve un problema técnico guardando tu recordatorio. Intenta de nuevo. 💜';
     }
   }
 
@@ -244,11 +272,16 @@ class MessageService {
             action_data: command
           });
 
-          return `¿Desde qué cuenta quieres registrar este ${type === 'expense' ? 'gasto' : 'ingreso'}? 💜\n\nOpciones: ${accounts.map(a => a.name).join(', ')}`;
+          // Deduplicar nombres de cuentas para la lista
+          const uniqueAccountNames = [...new Set(accounts.map(a => a.name))];
+          return `¿Desde qué cuenta quieres registrar este ${type === 'expense' ? 'gasto' : 'ingreso'}? 💜\n\nOpciones: ${uniqueAccountNames.join(', ')}`;
+        } else if (accounts.length === 1) {
+          // Si solo tiene una cuenta, usar esa automáticamente
+          targetAccount = accounts[0];
+        } else {
+          // Si no tiene cuentas (raro porque se crea una default), usar default
+          targetAccount = await AccountDBService.getDefaultAccount(user.user_id);
         }
-
-        // Si solo tiene una, usar la default (que ya lo hace FinanceService internamente, pero aquí podemos ser explícitos si queremos)
-        // Dejamos que FinanceService maneje el default si targetAccount es null
       }
 
       // Categorizar automáticamente
@@ -283,13 +316,13 @@ class MessageService {
       const emoji = type === 'expense' ? '💸' : '💰';
       const accountText = transaction.account_name ? ` en ${transaction.account_name}` : '';
 
-      let response = `${emoji} ¡Listo! Registré tu ${typeText} de $${amount.toFixed(2)} en ${category}${accountText}.\n\n`;
+      let response = `${emoji} ¡Listo! Registré tu ${typeText} de ${formatCurrency(amount)} en ${category}${accountText}.\n\n`;
 
       if (summary) {
         response += `📊 Resumen de tus ${summary.period}:\n`;
-        response += `• Ingresos: $${summary.totalIncome.toFixed(2)}\n`;
-        response += `• Gastos: $${summary.totalExpenses.toFixed(2)}\n`;
-        response += `• Balance: $${summary.balance.toFixed(2)}\n\n`;
+        response += `• Ingresos: ${formatCurrency(summary.totalIncome)}\n`;
+        response += `• Gastos: ${formatCurrency(summary.totalExpenses)}\n`;
+        response += `• Balance: ${formatCurrency(summary.balance)}\n\n`;
 
         // Agregar insight simple
         if (summary.balance < 0) {

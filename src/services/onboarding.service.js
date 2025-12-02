@@ -61,7 +61,25 @@ class OnboardingService {
     /**
    * Maneja el paso de nombre
    */
-    async handleNameStep(user, name) {
+    async handleNameStep(user, nameInput) {
+        let name = nameInput.trim();
+
+        // Limpiar frases comunes
+        const prefixes = [
+            /^me llamo\s+/i,
+            /^mi nombre es\s+/i,
+            /^soy\s+/i,
+            /^me dicen\s+/i,
+            /^yo soy\s+/i
+        ];
+
+        for (const prefix of prefixes) {
+            name = name.replace(prefix, '');
+        }
+
+        // Capitalizar primera letra
+        name = name.charAt(0).toUpperCase() + name.slice(1);
+
         if (name.length < 2) {
             return "Ese nombre es muy corto. ¿Cómo te llamas realmente? 😊";
         }
