@@ -88,6 +88,7 @@ class WebhookController {
       Logger.response('✉️  Respuesta enviada exitosamente');
       const logMsg = typeof response === 'object' ? response.message : response;
       Logger.info(`Preview: "${logMsg.substring(0, 100)}${logMsg.length > 100 ? '...' : ''}"`);
+      Logger.debug(`TwiML: ${twiml}`); // Debug log
 
       return res.type('text/xml').send(twiml);
 
