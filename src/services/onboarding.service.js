@@ -49,6 +49,9 @@ class OnboardingService {
                 case 'name_input':
                     return await this.handleNameStep(user, cleanMessage);
 
+                case 'challenge_input':
+                    return await this.handleChallengeStep(user, cleanMessage);
+
                 case 'cash_balance':
                     return await this.handleCashBalanceStep(user, cleanMessage);
 
@@ -89,10 +92,33 @@ class OnboardingService {
 
         await UserDBService.updateUser(user.phone_number, {
             name: name,
+            onboarding_step: 'challenge_input'
+        });
+
+        return `¡Un gusto, ${name}! 🤝\n\nMi trabajo no es solo organizar números, es hacer que tu dinero tenga alas 💸.\n\nMis especialidades son:\n• Optimización de gastos.\n• Estrategias de inversión.\n• Blindaje de tu patrimonio.\n\nPero las palabras se las lleva el viento... 🌬️\n\nAntes de que me confíes tus números, quiero que confíes en mi capacidad.\n\nPonme a prueba. Hazme una pregunta difícil sobre finanzas o economía (tasas de interés, inflación, cómo ahorrar). La que quieras. Estoy listo 😎.`;
+    }
+
+    /**
+     * Paso 0.5: Recibe pregunta reto -> Responde con IA -> Pide saldo en efectivo
+     */
+    async handleChallengeStep(user, message) {
+        // Usar AIService para responder la pregunta del usuario
+        const AIService = require('./ai.service');
+
+        // Obtener respuesta de la IA (sin herramientas, o ignorándolas)
+        const aiResponse = await AIService.getResponse(message, user.phone_number, {
+            userName: user.name,
+            // No pasamos historial completo para que se enfoque en la pregunta actual
+            conversationHistory: []
+        });
+
+        const answer = aiResponse.content || "Esa es una buena pregunta. 🤔";
+
+        await UserDBService.updateUser(user.phone_number, {
             onboarding_step: 'cash_balance'
         });
 
-        return `¡Un gusto, ${name}! 🤝\n\nAhora sí, pongamos orden. Para empezar con el pie derecho, necesito los números claros.\n\nCuéntame, ¿cuánto efectivo tienes en tu cartera ahora mismo? 💵`;
+        return `${answer}\n\nComo ves, juego en serio. 😎\n\nAhora quiero trazar tu ruta financiera, y para eso necesito saber nuestro punto de partida.\n\nTodo lo que hablemos queda en nuestra bóveda privada, solo tú y yo. 🔒\n\nPara arrancar con el pie derecho:\n\n¿Con cuánto dinero en efectivo dispones hoy para empezar a trabajar? 💵`;
     }
 
     /**
