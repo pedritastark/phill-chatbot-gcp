@@ -47,6 +47,12 @@ CREATE TABLE users (
     -- Onboarding
     onboarding_step VARCHAR(50) DEFAULT 'name', -- name, accounts, completed
     onboarding_completed BOOLEAN DEFAULT FALSE,
+    onboarding_data JSONB DEFAULT '{}',
+
+    -- Features
+    privacy_mode BOOLEAN DEFAULT FALSE,
+    current_streak INTEGER DEFAULT 0,
+    last_activity_date DATE,
 
     -- Estado de Conversación (Multi-turn)
     current_action VARCHAR(50), -- selecting_account, etc.
@@ -77,6 +83,7 @@ CREATE TABLE accounts (
     
     name VARCHAR(100) NOT NULL, -- "Bancolombia Ahorros", "Efectivo"
     type VARCHAR(50) NOT NULL, -- savings, checking, credit_card, cash, investment
+    category VARCHAR(50) DEFAULT 'LIQUIDEZ', -- LIQUIDEZ, INVERSION, AHORRO
     bank_name VARCHAR(100), -- "Bancolombia", "Davivienda"
     
     -- Información financiera
