@@ -97,7 +97,7 @@ class OnboardingService {
         const lowerName = name.toLowerCase();
 
         // Limpiar prefijos comunes si el usuario escribe una frase completa
-        const prefixes = ['me llamo', 'mi nombre es', 'soy', 'dime', 'me dicen'];
+        const prefixes = ['me llamo', 'mi nombre es', 'soy', 'dime', 'me dicen', 'llamame', 'llámame', 'me puedes decir', 'me puedes llamar', 'puedes decirme', 'puedes llamarme'];
         for (const prefix of prefixes) {
             if (lowerName.startsWith(prefix + ' ')) {
                 name = name.substring(prefix.length).trim();

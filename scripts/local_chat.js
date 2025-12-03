@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+// MOCK CREDENTIALS FOR LOCAL DEV if missing
+if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) {
+    console.warn('⚠️ TWILIO_ACCOUNT_SID missing or invalid. Using MOCK credentials for local chat.');
+    process.env.TWILIO_ACCOUNT_SID = 'AC' + '0'.repeat(32);
+    process.env.TWILIO_AUTH_TOKEN = 'mock_auth_token';
+    process.env.TWILIO_PHONE_NUMBER = '+15005550006';
+}
 const readline = require('readline');
 const MessageService = require('../src/services/message.service');
 const { closePool } = require('../src/config/database');
