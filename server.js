@@ -15,7 +15,7 @@ async function startServer() {
 
     // Verificar conexión a la base de datos
     Logger.info('Verificando conexión a PostgreSQL...');
-    const dbPeConnected = await testConnection();
+    const dbConnected = await testConnection();
 
     if (!dbConnected) {
       Logger.warning('⚠️  No se pudo conectar a PostgreSQL. El bot funcionará en modo JSON.');
