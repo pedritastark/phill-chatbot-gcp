@@ -61,11 +61,8 @@ class OnboardingService {
                 case 'data_acceptance':
                     return await this.handleDataAcceptanceStep(user, cleanMessage);
 
-                case 'cash_balance':
-                    return await this.handleCashBalanceStep(user, cleanMessage);
-
-                case 'bank_balance':
-                    return await this.handleBankBalanceStep(user, cleanMessage);
+                case 'initial_balances':
+                    return await this.handleInitialBalancesStep(user, cleanMessage);
 
                 case 'first_expense':
                     return await this.handleFirstExpenseStep(user, cleanMessage);
@@ -161,56 +158,36 @@ class OnboardingService {
         }
 
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_step: 'cash_balance'
+            onboarding_step: 'initial_balances'
         });
 
-        return `¡Excelente! Ya somos equipo. 🤝💜\n\nTe cuento rápido qué haré por ti: 1️⃣ Registraré tus movimientos (adiós al Excel aburrido). 2️⃣ Te recordaré pagos importantes. 3️⃣ Resolveré tus dudas como tu coach 24/7.\n\nPara que esto funcione, necesito entender dónde estamos parados hoy. Sin juicios, solo números para arrancar. 😉\n\nCuéntame, ${user.name}, ¿cuánto dinero en efectivo tienes en la billetera ahora mismo?`;
+        return `¡Excelente! Ya somos equipo. 🤝💜\n\nTe cuento rápido qué haré por ti: 1️⃣ Registraré tus movimientos (adiós al Excel aburrido). 2️⃣ Te recordaré pagos importantes. 3️⃣ Resolveré tus dudas como tu coach 24/7.\n\nPara que esto funcione, necesito entender dónde estamos parados hoy. Sin juicios, solo números para arrancar. 😉\n\nCuéntame, ${user.name}, ¿cuánto dinero tienes hoy?\n\nDime cuánto en **Efectivo** y cuánto en **Banco** (o Nequi/Daviplata) en un solo mensaje.\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`;
     }
 
     /**
-     * Paso 1: Recibe saldo en efectivo -> Pide saldo en banco
+     * Paso 1: Recibe saldos iniciales (Efectivo y Banco) -> Crea cuentas -> Pide primer gasto
      */
-    async handleCashBalanceStep(user, message) {
-        const amount = this.parseAmount(message);
+    async handleInitialBalancesStep(user, message) {
+        const AIService = require('./ai.service');
 
-        // Validación: Si es 0 y el mensaje no parece ser explícitamente "cero" o "nada"
-        const isExplicitZero = ['0', 'cero', 'nada', 'ninguno'].some(w => message.toLowerCase().includes(w));
-        if (amount === 0 && !isExplicitZero) {
-            return "Mmm, no entendí ese número. 🤔 ¿Podrías escribirme solo la cifra? Por ejemplo: '50.000' o '100k'.";
+        // Usar IA para extraer los montos
+        const balances = await AIService.extractInitialBalances(message);
+
+        const cashAmount = balances.cash || 0;
+        const bankAmount = balances.bank || 0;
+
+        // Validación básica: Si ambos son 0 y el mensaje no parece ser explícitamente "cero"
+        const isExplicitZero = ['0', 'cero', 'nada', 'ninguno', 'pelado'].some(w => message.toLowerCase().includes(w));
+        if (cashAmount === 0 && bankAmount === 0 && !isExplicitZero) {
+            return "No logré entender los montos. 🤔 Intenta escribirlos así: 'Efectivo: 50.000, Banco: 200.000'.";
         }
-
-        // Guardar dato temporalmente
-        const data = user.onboarding_data || {};
-        data.cash = amount;
-
-        await UserDBService.updateUser(user.phone_number, {
-            onboarding_step: 'bank_balance',
-            onboarding_data: data
-        });
-
-        return `Anotado. 💵 Efectivo: ${formatCurrency(amount)}.\n\nAhora vamos a lo digital. ¿Cuál es el saldo aproximado de tu cuenta bancaria principal? (Ojo: Solo necesito el monto total para tus reportes, nada de claves ni datos sensibles). 😎`;
-    }
-
-    /**
-     * Paso 2: Recibe saldo banco -> Crea cuentas -> Pide primer gasto
-     */
-    async handleBankBalanceStep(user, message) {
-        const amount = this.parseAmount(message);
-
-        const isExplicitZero = ['0', 'cero', 'nada', 'ninguno'].some(w => message.toLowerCase().includes(w));
-        if (amount === 0 && !isExplicitZero) {
-            return "No capté el monto. 😅 ¿Me lo repites? Ej: '2m' (2 millones) o '500.000'.";
-        }
-
-        const data = user.onboarding_data || {};
-        const cashBalance = data.cash || 0;
 
         // Crear cuentas reales
         await AccountDBService.create({
             userId: user.user_id,
             name: 'Efectivo',
             type: 'cash',
-            balance: cashBalance,
+            balance: cashAmount,
             isDefault: true,
             icon: '💵',
             color: '#10b981'
@@ -220,20 +197,20 @@ class OnboardingService {
             userId: user.user_id,
             name: 'Banco',
             type: 'savings',
-            balance: amount,
+            balance: bankAmount,
             isDefault: false,
             icon: '🏦',
             color: '#3b82f6'
         });
 
-        const total = cashBalance + amount;
+        const total = cashAmount + bankAmount;
 
         await UserDBService.updateUser(user.phone_number, {
             onboarding_step: 'first_expense',
             onboarding_data: {} // Limpiar datos temporales
         });
 
-        return `Perfecto. 🏦 Banco: ${formatCurrency(amount)}.\n\n� Tu Patrimonio Inicial es: ${formatCurrency(total)}. ¡Ya tengo la base lista! De aquí en adelante, yo me encargo de rastrear cada peso. 💜\n\nPruébame ahora mismo para que veas lo fácil que es.\n\nDime un gasto que hayas hecho hoy. Escríbelo normal, tipo: 'Gasté 15k en taxi'.`;
+        return `¡Entendido! 🫡\n💵 Efectivo: ${formatCurrency(cashAmount)}\n🏦 Banco: ${formatCurrency(bankAmount)}\n\n💰 **Patrimonio Inicial: ${formatCurrency(total)}**\n\n¡Ya tengo la base lista! De aquí en adelante, yo me encargo de rastrear cada peso. 💜\n\nPruébame ahora mismo para que veas lo fácil que es.\n\nDime un gasto que hayas hecho hoy. Escríbelo normal, tipo: 'Gasté 15k en taxi'.`;
     }
 
     /**
@@ -292,6 +269,11 @@ class OnboardingService {
         // Obtener nuevo saldo
         const accounts = await AccountDBService.findByUser(user.user_id);
         const updatedAccount = accounts.find(a => a.name === targetAccountName);
+
+        // AVANZAR AL SIGUIENTE PASO
+        await UserDBService.updateUser(user.phone_number, {
+            onboarding_step: 'reminder_setup'
+        });
 
         return `✅ Listo. Registré ${formatCurrency(expense.amount)} en ${category}. Tu nuevo saldo en ${targetAccountName} es ${formatCurrency(updatedAccount.balance)}. Así de simple funciona. 🔥\n\nUna última cosa, ${user.name}: la constancia es clave.\n\nVoy a escribirte a las 8 PM para hacer un cierre rápido del día. ¿Trato hecho?\n\nPD: Si alguna vez te pierdes o no sabes qué hacer, solo escribe 'Ayuda' y te mostraré mi guía de comandos. ¡Estoy aquí para ti! 💜`;
     }
@@ -369,9 +351,9 @@ class OnboardingService {
         // Caso 3: Solo tiene punto (ej: 150.000 o 150.50) -> Ambiguo
         else if (clean.includes('.')) {
             const parts = clean.split('.');
-            // Si el último grupo tiene 3 dígitos (ej: 150.000), asumimos miles
+            // Si el último grupo tiene 3 o más dígitos (ej: 150.000 o 200.0000), asumimos miles
             // Si tiene 2 (ej: 150.50), asumimos decimal
-            if (parts[parts.length - 1].length === 3) {
+            if (parts[parts.length - 1].length >= 3) {
                 clean = clean.replace(/\./g, '');
             }
             // Si no, dejamos el punto como decimal (JS standard)

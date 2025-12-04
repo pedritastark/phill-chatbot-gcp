@@ -56,6 +56,56 @@ class AIService {
   }
 
   /**
+   * Extrae los saldos iniciales de efectivo y banco del mensaje del usuario
+   * @param {string} message - Mensaje del usuario
+   * @returns {Promise<{cash: number, bank: number}>}
+   */
+  async extractInitialBalances(message) {
+    try {
+      const prompt = `
+      El usuario está en un proceso de onboarding y debe reportar sus saldos iniciales.
+      Analiza el siguiente mensaje y extrae los montos para "Efectivo" y "Banco".
+      
+      Mensaje del usuario: "${message}"
+      
+      Reglas de interpretación:
+      - "k" = miles (ej: 10k = 10000)
+      - "m" = millones (ej: 1.5m = 1500000)
+      - "barra" / "lucas" = mil
+      - Si solo menciona un monto, intenta inferir por contexto, pero si es ambiguo, asume que es Banco si es alto (>500k) o Efectivo si es bajo.
+      - Si dice "nada" o "cero", es 0.
+      - Nequi, Daviplata, Ahorros, Tarjeta -> Cuentan como "Banco".
+      - Billetera, bolsillo, físico -> Cuentan como "Efectivo".
+      
+      Responde EXCLUSIVAMENTE con un objeto JSON válido con este formato:
+      {
+        "cash": number,
+        "bank": number
+      }
+      NO agregues markdown, ni explicaciones. SOLO el JSON.
+      `;
+
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: [
+          { role: "system", content: "Eres un parser de datos financieros preciso." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0, // Determinista para extracción de datos
+        response_format: { type: "json_object" }
+      });
+
+      const content = response.choices[0].message.content;
+      return JSON.parse(content);
+
+    } catch (error) {
+      Logger.error('Error extrayendo saldos iniciales', error);
+      // Fallback seguro
+      return { cash: 0, bank: 0 };
+    }
+  }
+
+  /**
    * Obtiene las definiciones de herramientas para OpenAI
    */
   getTools() {

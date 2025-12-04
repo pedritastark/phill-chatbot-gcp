@@ -57,15 +57,26 @@ async function simulate() {
         }
         Logger.success('✅ Transición directa a Privacidad exitosa.');
 
-        // 4. Aceptar Privacidad -> Propuesta de Valor + Cash
+        // 4. Aceptar Privacidad -> Pide Saldos Iniciales (Combined)
         await logInteraction('User', 'Acepto');
         response = await MessageService.processMessage('Acepto', TEST_PHONE, TEST_PHONE);
         await logInteraction('Phill', typeof response === 'object' ? response.message : response);
 
-        if (!response.includes('Ya somos equipo') || !response.includes('cuánto dinero en efectivo')) {
-            throw new Error('❌ Falló flujo de aceptación y propuesta de valor');
+        if (!response.includes('cuánto dinero tienes hoy') || !response.includes('Efectivo') || !response.includes('Banco')) {
+            throw new Error('❌ Falló flujo de aceptación y solicitud de saldos combinados');
         }
-        Logger.success('✅ Flujo de aceptación correcto.');
+        Logger.success('✅ Flujo de aceptación correcto (Solicita saldos combinados).');
+
+        // 5. Enviar Saldos Combinados -> Pide Primer Gasto
+        const balanceMsg = "Tengo 50k en efectivo y 2.5m en el banco";
+        await logInteraction('User', balanceMsg);
+        response = await MessageService.processMessage(balanceMsg, TEST_PHONE, TEST_PHONE);
+        await logInteraction('Phill', typeof response === 'object' ? response.message : response);
+
+        if (!response.includes('Patrimonio Inicial') || !response.includes('50.000') || !response.includes('2.500.000')) {
+            throw new Error('❌ Falló parsing de saldos combinados');
+        }
+        Logger.success('✅ Parsing de saldos combinados exitoso.');
 
         Logger.info('🧪 TEST 2: Alias de Admin');
 
