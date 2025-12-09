@@ -93,7 +93,8 @@ class WebhookController {
         twiml = TwiMLHelper.generateMediaResponse(response.message, response.mediaUrl);
       } else {
         // Es una respuesta de texto normal
-        twiml = TwiMLHelper.generateSmartResponse(response);
+        const textMessage = typeof response === 'object' ? response.message : response;
+        twiml = TwiMLHelper.generateSmartResponse(textMessage);
       }
 
       Logger.response('✉️  Respuesta enviada exitosamente');
