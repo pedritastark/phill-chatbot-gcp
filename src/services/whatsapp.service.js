@@ -80,12 +80,16 @@ class WhatsappService {
         } catch (error) {
             Logger.error('Error enviando mensaje de WhatsApp (Content API)', error);
 
-            // Fallback silencioso a texto si falla la Content API
-            // (Por ejemplo si las credenciales no tienen permiso de Content API)
+            // Fallback silencioso a texto si falla la Content API (o si no está configurada)
             try {
                 Logger.warn('Intentando fallback a texto plano...');
-                let fallbackBody = `${body}\n\n`;
-                buttons.forEach(btn => { fallbackBody += `➤ ${btn.title}\n`; });
+
+                const titles = buttons.map(b => b.title);
+                const optionsList = titles.join(' / ');
+                const actionInstruction = titles.join(' o ');
+
+                let fallbackBody = `${body}\n\n[Próximamente botones de: ${optionsList}]\n👉 Escriba ${actionInstruction}`;
+
                 return await this.sendMessage(to, fallbackBody);
             } catch (fallbackError) {
                 throw error; // Si falla el fallback, lanzamos el original
