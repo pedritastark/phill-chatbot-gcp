@@ -20,6 +20,12 @@ class WhatsappService {
                 to = `whatsapp:${to}`;
             }
 
+            // Validación: Si no hay botones, enviar texto normal
+            if (!buttons || buttons.length === 0) {
+                Logger.warn(`Intentando enviar mensaje con botones vacío a ${to}. Enviando texto plano.`);
+                return await this.sendMessage(to.replace('whatsapp:', ''), body);
+            }
+
             Logger.info(`Enviando botones a ${to}: ${buttons.map(b => b.title).join(', ')}`);
 
             // Definir payload según la cantidad de botones
