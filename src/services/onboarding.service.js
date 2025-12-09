@@ -120,7 +120,13 @@ class OnboardingService {
             onboarding_step: 'data_acceptance' // Skip challenge, go to privacy
         });
 
-        return `¡Un gusto, ${name}! 💜\n\nAntes de empezar con la magia, pongámonos serios un segundo: Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura y ayudarte a organizar tus cuentas. ¿Aceptas los términos y condiciones? 🔒`;
+        return {
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar con la magia, pongámonos serios un segundo: Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura y ayudarte a organizar tus cuentas. ¿Aceptas los términos y condiciones? 🔒`,
+            buttons: [
+                { id: 'accept', title: 'Acepto' },
+                { id: 'terms', title: 'Leer Términos' }
+            ]
+        };
     }
 
     /**
@@ -161,7 +167,10 @@ class OnboardingService {
             onboarding_step: 'initial_balances'
         });
 
-        return `¡Excelente! Ya somos equipo. 🤝💜\n\nTe cuento rápido qué haré por ti: 1️⃣ Registraré tus movimientos (adiós al Excel aburrido). 2️⃣ Te recordaré pagos importantes. 3️⃣ Resolveré tus dudas como tu coach 24/7.\n\nPara que esto funcione, necesito entender dónde estamos parados hoy. Sin juicios, solo números para arrancar. 😉\n\nCuéntame, ${user.name}, ¿cuánto dinero tienes hoy?\n\nDime cuánto en **Efectivo** y cuánto en **Banco** (o Nequi/Daviplata) en un solo mensaje.\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`;
+        return {
+            message: `¡Excelente! Ya somos equipo. 🤝💜\n\nTe cuento rápido qué haré por ti: 1️⃣ Registraré tus movimientos (adiós al Excel aburrido). 2️⃣ Te recordaré pagos importantes. 3️⃣ Resolveré tus dudas como tu coach 24/7.\n\nPara que esto funcione, necesito entender dónde estamos parados hoy. Sin juicios, solo números para arrancar. 😉\n\nCuéntame, ${user.name}, ¿cuánto dinero tienes hoy?\n\nDime cuánto en **Efectivo** y cuánto en **Banco** (o Nequi/Daviplata) en un solo mensaje.\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`,
+            // No buttons here as it requires open text input
+        };
     }
 
     /**
@@ -170,47 +179,47 @@ class OnboardingService {
     async handleInitialBalancesStep(user, message) {
         const AIService = require('./ai.service');
 
-        // Usar IA para extraer los montos
-        const balances = await AIService.extractInitialBalances(message);
+        // Usar IA para extraer las cuentas
+        const extracted = await AIService.extractInitialBalances(message);
+        const accounts = extracted.accounts || [];
 
-        const cashAmount = balances.cash || 0;
-        const bankAmount = balances.bank || 0;
-
-        // Validación básica: Si ambos son 0 y el mensaje no parece ser explícitamente "cero"
-        const isExplicitZero = ['0', 'cero', 'nada', 'ninguno', 'pelado'].some(w => message.toLowerCase().includes(w));
-        if (cashAmount === 0 && bankAmount === 0 && !isExplicitZero) {
-            return "No logré entender los montos. 🤔 Intenta escribirlos así: 'Efectivo: 50.000, Banco: 200.000'.";
+        if (accounts.length === 0) {
+            return "No logré entender los montos. 🤔 Intenta escribirlos así: 'Efectivo: 50.000, Banco: 200.000' o 'Nequi: 50k'.";
         }
 
-        // Crear cuentas reales
-        await AccountDBService.create({
-            userId: user.user_id,
-            name: 'Efectivo',
-            type: 'cash',
-            balance: cashAmount,
-            isDefault: true,
-            icon: '💵',
-            color: '#10b981'
-        });
+        // Limpiar cuentas existentes (por ejemplo, la default creada al registrar usuario)
+        // Para asegurar que solo quedan las que el usuario mencionó
+        const existingAccounts = await AccountDBService.findByUser(user.user_id);
+        for (const acc of existingAccounts) {
+            await AccountDBService.delete(acc.account_id);
+        }
 
-        await AccountDBService.create({
-            userId: user.user_id,
-            name: 'Banco',
-            type: 'savings',
-            balance: bankAmount,
-            isDefault: false,
-            icon: '🏦',
-            color: '#3b82f6'
-        });
+        // Crear TODAS las cuentas detectadas
+        let total = 0;
+        let responseText = "¡Entendido! 🫡\n";
 
-        const total = cashAmount + bankAmount;
+        for (const account of accounts) {
+            await AccountDBService.create({
+                userId: user.user_id,
+                name: account.name,
+                type: account.type || 'savings',
+                balance: account.balance,
+                isDefault: account.type === 'cash', // Solo marcar default si es efectivo o la primera
+                icon: account.type === 'cash' ? '💵' : '🏦',
+                color: account.type === 'cash' ? '#10b981' : '#3b82f6'
+            });
+            total += account.balance;
+            responseText += `${account.type === 'cash' ? '💵' : '🏦'} ${account.name}: ${formatCurrency(account.balance)}\n`;
+        }
+
+        responseText += `\n💰 **Patrimonio Inicial: ${formatCurrency(total)}**\n\n¡Ya tengo la base lista! De aquí en adelante, yo me encargo de rastrear cada peso. 💜\n\nPruébame ahora mismo para que veas lo fácil que es.\n\nDime un gasto que hayas hecho hoy. Escríbelo normal, tipo: 'Gasté 15k en taxi'.`;
 
         await UserDBService.updateUser(user.phone_number, {
             onboarding_step: 'first_expense',
             onboarding_data: {} // Limpiar datos temporales
         });
 
-        return `¡Entendido! 🫡\n💵 Efectivo: ${formatCurrency(cashAmount)}\n🏦 Banco: ${formatCurrency(bankAmount)}\n\n💰 **Patrimonio Inicial: ${formatCurrency(total)}**\n\n¡Ya tengo la base lista! De aquí en adelante, yo me encargo de rastrear cada peso. 💜\n\nPruébame ahora mismo para que veas lo fácil que es.\n\nDime un gasto que hayas hecho hoy. Escríbelo normal, tipo: 'Gasté 15k en taxi'.`;
+        return responseText;
     }
 
     /**
@@ -239,7 +248,25 @@ class OnboardingService {
             }
         });
 
-        return `Entendido. ¿Esa plata salió del Efectivo o del Banco? 👇`;
+        // Obtener las cuentas reales del usuario
+        const accounts = await AccountDBService.findByUser(user.user_id);
+
+        let accountButtons = accounts.map(acc => ({
+            id: acc.name, // Usar el nombre como ID para fácil matching
+            title: `${acc.name} (${formatCurrency(acc.balance)})` // Mostrar saldo en el botón
+        }));
+
+        // Limitar a 3 botones (WhatsApp limitation) - Priorizar por uso o saldo
+        // Ojo: Si hay muchas cuentas, esto podría ocultar algunas. 
+        // Para MVP, tomamos las primeras 3.
+        if (accountButtons.length > 3) {
+            accountButtons = accountButtons.slice(0, 3);
+        }
+
+        return {
+            message: `Entendido. ¿De qué cuenta salió esa plata? 👇`,
+            buttons: accountButtons
+        };
     }
 
     /**
@@ -250,9 +277,30 @@ class OnboardingService {
         const data = user.onboarding_data || {};
         const expense = data.pending_expense;
 
-        let targetAccountName = 'Efectivo';
-        if (accountName.includes('banco') || accountName.includes('tarjeta')) {
-            targetAccountName = 'Banco';
+        // Lógica de selección dinámica: buscar coincidencia en las cuentas del usuario
+        const accounts = await AccountDBService.findByUser(user.user_id);
+
+        // 1. Intentar match exacto (case insensitive)
+        let targetAccount = accounts.find(a => a.name.toLowerCase() === accountName);
+
+        // 2. Si no match, buscar coincidencia parcial
+        if (!targetAccount) {
+            targetAccount = accounts.find(a => a.name.toLowerCase().includes(accountName));
+        }
+
+        // 3. Fallback inteligente
+        if (!targetAccount) {
+            // Si dijo "banco" y no hay cuenta llamada "banco", buscar una de ahorros
+            if (accountName.includes('banco') || accountName.includes('tarjeta')) {
+                targetAccount = accounts.find(a => a.type === 'savings');
+            } else if (accountName.includes('efectivo')) {
+                targetAccount = accounts.find(a => a.type === 'cash');
+            }
+        }
+
+        // 4. Último recurso: cuenta default
+        if (!targetAccount) {
+            targetAccount = accounts.find(a => a.is_default) || accounts[0];
         }
 
         // Registrar la transacción real
@@ -263,19 +311,26 @@ class OnboardingService {
             expense.amount,
             expense.description,
             category,
-            targetAccountName
+            targetAccount.name
         );
 
-        // Obtener nuevo saldo
-        const accounts = await AccountDBService.findByUser(user.user_id);
-        const updatedAccount = accounts.find(a => a.name === targetAccountName);
+        // Obtener nuevo saldo actualizado
+        const updatedAccounts = await AccountDBService.findByUser(user.user_id);
+        const updatedAccount = updatedAccounts.find(a => a.name === targetAccount.name);
 
         // AVANZAR AL SIGUIENTE PASO
         await UserDBService.updateUser(user.phone_number, {
             onboarding_step: 'reminder_setup'
         });
 
-        return `✅ Listo. Registré ${formatCurrency(expense.amount)} en ${category}. Tu nuevo saldo en ${targetAccountName} es ${formatCurrency(updatedAccount.balance)}. Así de simple funciona. 🔥\n\nUna última cosa, ${user.name}: la constancia es clave.\n\nVoy a escribirte a las 8 PM para hacer un cierre rápido del día. ¿Trato hecho?\n\nPD: Si alguna vez te pierdes o no sabes qué hacer, solo escribe 'Ayuda' y te mostraré mi guía de comandos. ¡Estoy aquí para ti! 💜`;
+        return {
+            message: `✅ Listo. Registré ${formatCurrency(expense.amount)} en ${category}. Tu nuevo saldo en ${targetAccount.name} es ${formatCurrency(updatedAccount.balance)}. Así de simple funciona. 🔥\n\nUna última cosa, ${user.name}: la constancia es clave.\n\nVoy a escribirte a las 8 PM para hacer un cierre rápido del día. ¿Trato hecho?\n\nPD: Si alguna vez te pierdes o no sabes qué hacer, solo escribe 'Ayuda' y te mostraré mi guía de comandos. ¡Estoy aquí para ti! 💜`,
+            buttons: [
+                { id: 'deal', title: '¡De una!' },
+                { id: 'ok', title: 'Listo' },
+                { id: 'questions', title: 'Tengo preguntas' }
+            ]
+        };
     }
 
     /**

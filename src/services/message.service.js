@@ -87,7 +87,13 @@ class MessageService {
       // Si el onboarding no está completo, procesar con OnboardingService
       if (!user.onboarding_completed) {
         const onboardingResponse = await OnboardingService.processMessage(userId, message);
-        await ConversationService.addAssistantMessage(userId, onboardingResponse);
+
+        // Extraer texto si es un objeto con botones
+        const msgToLog = (typeof onboardingResponse === 'object' && onboardingResponse.message)
+          ? onboardingResponse.message
+          : onboardingResponse;
+
+        await ConversationService.addAssistantMessage(userId, msgToLog);
         return onboardingResponse;
       }
 

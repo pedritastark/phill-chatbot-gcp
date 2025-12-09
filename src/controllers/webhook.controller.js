@@ -58,8 +58,19 @@ class WebhookController {
       // Procesar el mensaje
       const response = await MessageService.processMessage(message, from);
 
+      // NUEVO: Soporte para botones interactivos (Bypasses TwiML)
+      if (typeof response === 'object' && response.buttons) {
+        const WhatsappService = require('../services/whatsapp.service');
+        await WhatsappService.sendButtonMessage(from, response.message, response.buttons);
+
+        // Retornar TwiML vacío para confirmar recepción a Twilio
+        // (El mensaje ya se envió vía API)
+        Logger.response('🔘  Respuesta con botones enviada vía API');
+        return res.type('text/xml').send('<Response></Response>');
+      }
+
       // Análisis de longitud de respuesta
-      const responseLength = response.length;
+      const responseLength = typeof response === 'string' ? response.length : (response.message || '').length;
       const safeLimit = config.messaging.maxLength - config.messaging.safetyMargin;
 
       Logger.info(`📏 Longitud de respuesta: ${responseLength} caracteres`);
