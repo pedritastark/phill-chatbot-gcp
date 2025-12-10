@@ -30,13 +30,21 @@ async function run() {
 
         Logger.info('🚀 Registering expenses...');
         // 1. Register Food Expense (implicitly categorizes as Comida or Alimentación)
-        await MessageService.processMessage('Gasté 20k en hamburguesa', TEST_PHONE);
+        let res1 = await MessageService.processMessage('Gasté 20k en hamburguesa', TEST_PHONE);
+        console.log('RES 1:', res1);
 
         // 2. Register Another Food Expense
-        await MessageService.processMessage('Almuerzo por 15000', TEST_PHONE);
+        let res2 = await MessageService.processMessage('Almuerzo por 15000', TEST_PHONE);
+        console.log('RES 2:', res2);
 
         // 3. Register Transport Expense (to ensure filtering works)
-        await MessageService.processMessage('Taxi 10k', TEST_PHONE);
+        let res3 = await MessageService.processMessage('Taxi 10k', TEST_PHONE);
+        console.log('RES 3:', res3);
+
+        Logger.info('🚀 Registering INCOME...');
+        // 3.5 Register Income
+        let resIncome = await MessageService.processMessage('Me pagaron 500k de nómina', TEST_PHONE);
+        console.log('RES INCOME:', resIncome);
 
         Logger.info('❓ Asking for category spending...');
         // 4. Ask: How much did I spend on food?

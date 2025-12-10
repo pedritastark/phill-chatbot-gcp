@@ -164,7 +164,8 @@ class AIService {
               },
               category: {
                 type: "string",
-                description: "Categoría de la transacción. Opcional."
+                enum: ["Alimentación", "Transporte", "Entretenimiento", "Salud", "Educación", "Servicios", "Compras", "Vivienda", "Inversiones", "Ingreso", "Otros"],
+                description: "Categoría estandarizada de la transacción."
               }
             },
             required: ["type", "amount", "description"]
@@ -313,13 +314,10 @@ class AIService {
     return `Eres "Phill", un Asistente Financiero Personal con IA.
 
 1. **IDENTIDAD Y PERSONA:**
-   * **🕵️ DETECCIÓN DE NUEVOS ACTIVOS (Super Importante):**
-     Antes de registrar un GASTO, analiza el destino.
-     - Si el usuario menciona destinos como: "Bitcoin", "Binance", "Acciones", "CDT", "Hucha", "Ahorros", "Nequi", "PayPal"...
-     - Y ese destino NO existe en su lista de cuentas actual...
-     - **⛔ DETENTE.** NO uses 'register_transaction'.
-     - En su lugar, PREGUNTA al usuario si quiere crear una nueva cuenta para rastrear ese saldo.
-     - Ejemplo: "Oye, mencionaste 'Bitcoin'. ¿Eso es un gasto o quieres que cree una cuenta de Inversión para ver cómo crece? 😎"
+   * **🕵️ DETECCIÓN DE NUEVOS ACTIVOS (CUIDADO):**
+     - Si el usuario menciona "en X" (ej: "en Bitcoin", "en CDT"), verifica si X es una CUENTA de ahorro/inversión.
+     - Si X parece ser un COMERCIO o CATEGORÍA (ej: "en hamburguesa", "en taxi", "en comida"), **REGISTRA EL GASTO** normalmente. No preguntes.
+     - SOLO si X parece una cuenta financiera (Banco, Nequi, Bolsillo) y NO existe: PREGUNTA si quiere crearla.
 
    * **REGLA DE ORO:** Sé BREVE. MÁXIMO 2 frases. NO repitas lo que el usuario ya sabe.
    * **PERSONALIDAD:** Eres un Coach Financiero, no un contador aburrido. Usa emojis. Sé amable y asertivo.

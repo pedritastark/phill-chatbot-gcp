@@ -1,5 +1,6 @@
 const { TransactionDBService, CategoryDBService, AccountDBService, UserDBService } = require('./db');
 const Logger = require('../utils/logger');
+const HybridCategorizer = require('./categorizer');
 
 /**
  * Servicio de finanzas para gestionar gastos e ingresos
@@ -23,12 +24,28 @@ class FinanceService {
 
       // 2. Determinar la categoría
       let category = null;
+      let confidence = 1.0;
+      let detectedByAI = false;
+
       if (categoryName) {
-        // Buscar o crear la categoría
+        // Buscar o crear la categoría explícita
         category = await CategoryDBService.findOrCreate(user.user_id, categoryName, type);
       } else {
-        // Categorizar automáticamente
-        const autoCategoryName = this.categorizeTransaction(description);
+        // Categorizar automáticamente usando HybridCategorizer
+        const catResult = await HybridCategorizer.categorize(description);
+
+        let autoCategoryName = 'Otros Gastos';
+        if (catResult && catResult.categoria) {
+          autoCategoryName = catResult.categoria;
+          confidence = catResult.confianza;
+          detectedByAI = true;
+        }
+
+        Logger.info(`Categoría detectada: ${autoCategoryName} (Confianza: ${confidence})`);
+
+        // Mapear 'Otros' a 'Otros Gastos' si es necesario para consistencia
+        if (autoCategoryName === 'Otros') autoCategoryName = 'Otros Gastos';
+
         category = await CategoryDBService.findOrCreate(user.user_id, autoCategoryName, type);
       }
 
@@ -69,20 +86,9 @@ class FinanceService {
         type,
         amount,
         description,
-        detectedByAI: true,
-        confidenceScore: categoryName ? 1.0 : 0.8,
+        detectedByAI: detectedByAI,
+        confidenceScore: confidence,
       });
-
-      // 4.1 Actualizar saldo de la cuenta
-      if (account) {
-        // Asegurar que amount sea número
-        const amountNum = parseFloat(amount);
-        if (type === 'expense') {
-          await AccountDBService.updateBalance(account.account_id, amountNum, 'subtract');
-        } else if (type === 'income') {
-          await AccountDBService.updateBalance(account.account_id, amountNum, 'add');
-        }
-      }
 
       // 5. Actualizar Racha (Streak)
       const today = new Date();
@@ -92,10 +98,6 @@ class FinanceService {
 
       let lastActivityStr = null;
       if (user.last_activity_date) {
-        const lastDate = new Date(user.last_activity_date);
-        // Asumimos que last_activity_date ya se guardó correctamente, pero por si acaso
-        const lastColombiaTime = new Date(lastDate.getTime() - (5 * 60 * 60 * 1000)); // Ajuste si viene en UTC
-        // Mejor: Si la DB guarda DATE sin hora, user.last_activity_date será string YYYY-MM-DD o Date a medianoche UTC
         // Simplificación: Comparar strings YYYY-MM-DD
         lastActivityStr = new Date(user.last_activity_date).toISOString().split('T')[0];
       }
@@ -327,36 +329,6 @@ class FinanceService {
       Logger.error(`Error obteniendo gasto en categoría ${categoryName}`, error);
       return 0;
     }
-  }
-
-  /**
-   * Categoriza automáticamente una transacción basándose en la descripción
-   * @param {string} description - Descripción de la transacción
-   * @returns {string} - Nombre de la categoría
-   */
-  categorizeTransaction(description) {
-    const desc = description.toLowerCase();
-
-    const categories = {
-      'Alimentación': ['comida', 'restaurante', 'comí', 'almuerzo', 'desayuno', 'cena', 'café', 'pizza', 'hamburguesa', 'supermercado', 'mercado'],
-      'Transporte': ['transporte', 'uber', 'taxi', 'gasolina', 'metro', 'bus', 'pasaje', 'combustible', 'estacionamiento'],
-      'Entretenimiento': ['cine', 'netflix', 'spotify', 'juego', 'concierto', 'fiesta', 'bar', 'discoteca', 'teatro'],
-      'Salud': ['doctor', 'medicina', 'farmacia', 'hospital', 'gym', 'gimnasio', 'médico', 'consulta', 'dentista'],
-      'Servicios': ['luz', 'agua', 'internet', 'teléfono', 'renta', 'alquiler', 'arriendo', 'cable', 'gas'],
-      'Educación': ['curso', 'libro', 'universidad', 'colegio', 'clases', 'matrícula', 'inscripción', 'escuela'],
-      'Salario': ['salario', 'sueldo', 'pago', 'nómina', 'ingreso', 'trabajo'],
-      'Inversiones': ['inversión', 'dividendo', 'interés', 'ganancia', 'rendimiento'],
-      'Compras': ['compra', 'tienda', 'ropa', 'zapatos', 'electrónica', 'amazon', 'shopping'],
-      'Vivienda': ['casa', 'hogar', 'muebles', 'decoración', 'reparación', 'mantenimiento'],
-    };
-
-    for (const [category, keywords] of Object.entries(categories)) {
-      if (keywords.some(keyword => desc.includes(keyword))) {
-        return category;
-      }
-    }
-
-    return 'Otros Gastos';
   }
 
   /**

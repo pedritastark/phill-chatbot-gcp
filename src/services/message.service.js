@@ -401,12 +401,13 @@ class MessageService {
       }
 
 
-      // Categorizar automáticamente
-      let category = FinanceService.categorizeTransaction(description);
+      // Utilizar la categoría sugerida por la IA si existe, de lo contrario enviar null
+      // para que FinanceService utilice el HybridCategorizer.
+      let category = aiCategory;
 
-      // Si la categorización automática no fue precisa y la IA sugirió una categoría, usarla
-      if (category === 'Otros Gastos' && aiCategory) {
-        category = aiCategory;
+      // Si la IA dice "Otros" o "Otros Gastos", preferimos que el HybridCategorizer intente clasificarlo mejor
+      if (category && (category.toLowerCase() === 'otros' || category.toLowerCase() === 'otros gastos')) {
+        category = null;
       }
 
       // Registrar la transacción
