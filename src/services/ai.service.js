@@ -279,6 +279,28 @@ class AIService {
             required: []
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_category_spending",
+          description: "Consultar cuánto ha gastado el usuario en una categoría específica.",
+          parameters: {
+            type: "object",
+            properties: {
+              category_name: {
+                type: "string",
+                description: "Nombre de la categoría a consultar (ej: 'Comida', 'Transporte', 'Arriendo')."
+              },
+              period: {
+                type: "string",
+                enum: ["this_month", "last_month", "all_time"],
+                description: "Periodo de tiempo a consultar. Por defecto 'this_month' si no se especifica."
+              }
+            },
+            required: ["category_name"]
+          }
+        }
       }
     ];
   }
@@ -336,11 +358,13 @@ class AIService {
    * Si la información del usuario es incompleta para una acción, pregunta SOLO el dato que falta.
 
 4. **HERRAMIENTAS Y ACCIONES (Function Calling):**
-   * **Gastos/Ingresos:** Si detectas movimiento de dinero, usa 'register_transaction'.
+   * **IMPORTANTE:** Para que una acción sea real, DEBES llamar a la herramienta. Escribir "Lo registré" NO SIRVE si no llamas a la herramienta.
+   * **Gastos/Ingresos:** Si detectas movimiento de dinero, usa 'register_transaction'. SIEMPRE.
    * **Transferencias (OJO):** Si el usuario dice "Saqué plata del cajero", eso NO es un gasto. Es una transferencia de Banco a Efectivo. Usa 'register_transfer'.
    * **Ajustes:** Si dice "En realidad tengo $X", usa 'adjust_balance'.
    * **Recordatorios:** Usa 'set_reminder'.
    * **Reportes:** Usa 'generate_report'.
+   * **Consultas:** Usa 'get_category_spending' si preguntan por categorías.
 
 5. **EDUCADOR, NO ASESOR (Legal):**
    * Eres un educador. Explicas conceptos (ETFs, Ahorro).
@@ -378,11 +402,23 @@ Ojo, que ya casi tocamos el límite de salidas del mes. ¡Vamos a cerrar la sema
       // Construir el mensaje actual con contexto financiero y fecha
       // Usar formato ISO para evitar ambigüedad (YYYY-MM-DD)
       const now = new Date();
-      // Ajustar a zona horaria Colombia (-5) manualmente para asegurar ISO correcto con offset
-      const colombiaTime = new Date(now.getTime() - (5 * 60 * 60 * 1000)); // UTC-5
-      const isoString = colombiaTime.toISOString().replace('Z', '-05:00');
+      // Usar Intl para hora colombiana robusta
+      const colombiaTime = new Intl.DateTimeFormat('es-CO', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(now);
 
-      let currentMessageContent = `[Fecha y hora actual (ISO 8601): ${isoString}]\n\n${userMessage}`;
+      // Formatear para que se vea estándar (YYYY-MM-DD HH:mm:ss) - Intl devuelve algo como "dd/mm/yyyy, HH:mm:ss" dependiendo de locale
+      // Pero es más seguro pasarle al LLM descripciones claras.
+      const isoString = `${colombiaTime} (Hora Colombia)`;
+
+      let currentMessageContent = `[Fecha y hora actual: ${isoString}]\n\n${userMessage}`;
 
       if (context.userName) {
         currentMessageContent = `[Nombre del usuario: ${context.userName}]\n\n${currentMessageContent}`;
@@ -398,6 +434,9 @@ Ojo, que ya casi tocamos el límite de salidas del mes. ¡Vamos a cerrar la sema
       ];
 
       // Si hay historial de conversación, agregarlo
+      // NOTA: Deshabilitado temporalmente para evitar alucinaciones en llamadas a herramientas.
+      // La IA tiende a replicar respuestas de texto sin llamar herramientas si ve historial previo similar.
+      /* 
       if (context.conversationHistory && context.conversationHistory.length > 0) {
         Logger.info(`📜 Usando historial de ${context.conversationHistory.length} mensajes`);
 
@@ -420,8 +459,10 @@ Ojo, que ya casi tocamos el límite de salidas del mes. ¡Vamos a cerrar la sema
           }
         }
       } else {
-        Logger.info('📝 Sin historial previo, iniciando nueva conversación');
+        Logger.info('📝 Sin historial previo (deshabilitado o vacío)');
       }
+      */
+      Logger.info('📝 Historial deshabilitado por optimización de contexto');
 
       // Agregar mensaje actual
       messages.push({ role: 'user', content: currentMessageContent });

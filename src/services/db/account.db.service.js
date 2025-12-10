@@ -63,7 +63,7 @@ class AccountDBService {
         return result.rows[0];
       }
 
-      // Si no hay cuenta predeterminada, devolver la primera
+      // Si no hay cuenta predeterminada, buscar la primera creada
       const fallback = await query(
         `SELECT * FROM accounts 
          WHERE user_id = $1 AND is_active = true 
@@ -72,7 +72,22 @@ class AccountDBService {
         [userId]
       );
 
-      return fallback.rows.length > 0 ? fallback.rows[0] : null;
+      if (fallback.rows.length > 0) {
+        return fallback.rows[0];
+      }
+
+      // Si no existe NINGUNA cuenta, crear la cuenta por defecto "Efectivo"
+      Logger.info(`Usuario ${userId} no tiene cuentas. Creando 'Efectivo' por defecto.`);
+      const newAccount = await this.create({
+        userId,
+        name: 'Efectivo',
+        type: 'cash',
+        balance: 0,
+        isDefault: true,
+        icon: 'money'
+      });
+
+      return newAccount;
     } catch (error) {
       Logger.error('Error al obtener cuenta predeterminada', error);
       throw error;

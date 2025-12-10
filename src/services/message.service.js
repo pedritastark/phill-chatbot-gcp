@@ -210,6 +210,8 @@ class MessageService {
           toolResponse = await this.handleVisualReportCommand(functionArgs, userId);
         } else if (functionName === 'create_account') {
           toolResponse = await this.handleCreateAccountCommand(user, toolCall);
+        } else if (functionName === 'get_category_spending') {
+          toolResponse = await this.handleCategorySpendingCommand(functionArgs, userId);
         } else {
           Logger.warning(`⚠️ Herramienta desconocida: ${functionName}`);
           toolResponse = 'Lo siento, intenté hacer algo que no sé cómo hacer. 💜';
@@ -247,6 +249,27 @@ class MessageService {
     } catch (error) {
       Logger.error('Error al procesar mensaje', error);
       throw error;
+    }
+  }
+
+  /**
+   * Maneja el comando de consultar gasto por categoría
+   */
+  async handleCategorySpendingCommand(args, userId) {
+    try {
+      const FinanceService = require('./finance.service');
+      const { category_name, period } = args;
+
+      const total = await FinanceService.getCategorySpending(userId, category_name, period);
+
+      // Retornar dato crudo para la IA, ella formateará el mensaje
+      // Incluimos el nombre de la categoría y periodo para contexto
+      const periodText = period === 'this_month' ? 'este mes' : (period === 'last_month' ? 'el mes pasado' : 'en total');
+      return `Gastado en ${category_name} (${periodText}): ${formatCurrency(total)}`;
+
+    } catch (error) {
+      Logger.error('Error consultando gasto categoría', error);
+      return 'No pude consultar esos datos. 💜';
     }
   }
 
@@ -335,7 +358,7 @@ class MessageService {
    */
   async handleFinancialCommand(command, userId) {
     try {
-      const { type, amount, description, account } = command;
+      const { type, amount, description, account, category: aiCategory } = command;
       const AccountDBService = require('./db/account.db.service');
       const UserDBService = require('./db/user.db.service');
 
@@ -377,19 +400,16 @@ class MessageService {
         }
       }
 
+
       // Categorizar automáticamente
-      const category = FinanceService.categorizeTransaction(description);
+      let category = FinanceService.categorizeTransaction(description);
+
+      // Si la categorización automática no fue precisa y la IA sugirió una categoría, usarla
+      if (category === 'Otros Gastos' && aiCategory) {
+        category = aiCategory;
+      }
 
       // Registrar la transacción
-      // Nota: Necesitamos actualizar createTransaction para aceptar accountId explícito si lo tenemos
-      // Por ahora FinanceService.createTransaction usa default si no se pasa nada.
-      // Vamos a asumir que FinanceService.createTransaction será actualizado o usaremos lógica aquí.
-      // Espera, FinanceService.createTransaction NO acepta accountId explícito en su firma actual: (userId, type, amount, description, categoryName)
-      // Debemos actualizar FinanceService también.
-
-      // Por ahora, pasamos el nombre de la cuenta en la descripción o modificamos FinanceService.
-      // Mejor modifiquemos FinanceService para aceptar accountName.
-
       const transaction = await FinanceService.createTransaction(
         userId,
         type,
@@ -409,7 +429,7 @@ class MessageService {
       const emoji = type === 'expense' ? '💸' : '💰';
       const accountText = transaction.account_name ? ` en ${transaction.account_name}` : '';
 
-      let response = `${emoji} ¡Listo! Registré tu ${typeText} de ${formatCurrency(amount)} en ${category}${accountText}.\n\n`;
+      let response = `${emoji} ¡Listo! Registré tu ${typeText} de ${formatCurrency(amount)} en *${category}*${accountText}.\n\n`;
 
       if (summary) {
         response += `📊 Resumen de tus ${summary.period}:\n`;

@@ -4,8 +4,8 @@
   "description": "Phill - Asesor Financiero Personal vía WhatsApp con registro de gastos e ingresos",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "TZ=America/Bogota node server.js",
+    "dev": "TZ=America/Bogota nodemon server.js",
     "check-env": "node scripts/check-env.js",
     "test:messages": "node scripts/test-message-splitting.js",
     "db:setup": "node scripts/db-setup.js",

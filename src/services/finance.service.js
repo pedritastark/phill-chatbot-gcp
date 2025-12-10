@@ -73,6 +73,17 @@ class FinanceService {
         confidenceScore: categoryName ? 1.0 : 0.8,
       });
 
+      // 4.1 Actualizar saldo de la cuenta
+      if (account) {
+        // Asegurar que amount sea número
+        const amountNum = parseFloat(amount);
+        if (type === 'expense') {
+          await AccountDBService.updateBalance(account.account_id, amountNum, 'subtract');
+        } else if (type === 'income') {
+          await AccountDBService.updateBalance(account.account_id, amountNum, 'add');
+        }
+      }
+
       // 5. Actualizar Racha (Streak)
       const today = new Date();
       // Ajustar a zona horaria Colombia para cálculo de fechas
@@ -262,6 +273,59 @@ class FinanceService {
     } catch (error) {
       Logger.error('Error al obtener transacciones recientes', error);
       return [];
+    }
+  }
+
+  /**
+   * Obtiene el gasto total en una categoría específica
+   * @param {string} phoneNumber - Número de teléfono del usuario
+   * @param {string} categoryName - Nombre de la categoría
+   * @param {string} period - Periodo ('this_month', 'last_month', 'all_time')
+   * @returns {Promise<number>}
+   */
+  async getCategorySpending(phoneNumber, categoryName, period = 'this_month') {
+    try {
+      const user = await UserDBService.findByPhoneNumber(phoneNumber);
+      if (!user) return 0;
+
+      // Normalizar nombre de categoría para coincidir con DB
+      let normalizedCategory = categoryName;
+      const term = categoryName.toLowerCase();
+
+      if (['comida', 'almuerzo', 'cena', 'desayuno', 'restaurante'].some(k => term.includes(k))) {
+        normalizedCategory = 'Alimentación';
+      } else if (['transporte', 'uber', 'taxi', 'bus'].some(k => term.includes(k))) {
+        normalizedCategory = 'Transporte';
+      }
+      // Agregar más mapeos si es necesario, o confiar en que el usuario diga el nombre exacto
+
+      const { query } = require('../config/database');
+      let dateFilter = "";
+      const params = [user.user_id, `%${normalizedCategory}%`]; // Partial match for robustness
+
+      if (period === 'this_month') {
+        dateFilter = "AND t.created_at >= date_trunc('month', CURRENT_DATE)";
+      } else if (period === 'last_month') {
+        dateFilter = "AND t.created_at >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month') AND t.created_at < date_trunc('month', CURRENT_DATE)";
+      }
+      // 'all_time' no agrega filtro de fecha
+
+      const sql = `
+        SELECT COALESCE(SUM(t.amount), 0) as total
+        FROM transactions t
+        JOIN categories c ON t.category_id = c.category_id
+        WHERE t.user_id = $1
+        AND t.type = 'expense'
+        AND c.name ILIKE $2
+        ${dateFilter}
+      `;
+
+      const res = await query(sql, params);
+      return parseFloat(res.rows[0].total);
+
+    } catch (error) {
+      Logger.error(`Error obteniendo gasto en categoría ${categoryName}`, error);
+      return 0;
     }
   }
 
