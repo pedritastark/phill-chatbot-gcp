@@ -306,7 +306,10 @@ class OnboardingService {
     }
 
     async handleTutorialExplanationStep(user, message) {
-        if (message.toLowerCase().includes('no')) {
+        if (message.toLowerCase().includes('no') || message.includes('no_wait')) {
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: { step: 'first_expense' }
+            });
             return "¡Sin miedo! Es solo un ejercicio. 😉 Necesitamos romper el hielo con tu billetera. \n\nDime un gasto pequeño (un café, un pasaje) que hayas hecho hoy. ¡Hazlo por tu 'yo' del futuro!";
         }
 
@@ -351,7 +354,10 @@ class OnboardingService {
 
         // Move to Account Selection
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_data: { step: 'expense_account' }
+            onboarding_data: {
+                ...data,
+                step: 'expense_account'
+            }
         });
 
         const accounts = await AccountDBService.findByUser(user.user_id);

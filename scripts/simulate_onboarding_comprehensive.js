@@ -18,14 +18,11 @@ const steps = [
     { input: 'Tengo 50k en Nequi y 100k en Efectivo', expected: 'Confirma' },
     { input: 'accept', expected: '¿Qué DEBES?' }, // "1" mapped to 'accept'
 
-    // LIABILITIES - RETRY FLOW
+    // LIABILITIES - RETRY FLOW -> THEN ACCEPT VISA
     { input: 'Debo 500k a Visa', expected: 'Confirma' },
-    { input: 'retry', expected: 'Escríbelo de nuevo' }, // "2" mapped to 'retry'
-    { input: 'Cero', expected: 'Libre de deudas' },
-    { input: 'accept', expected: 'Radiografía' }, // "1" mapped to 'accept' (Simulated logic might need this step if Cero prompts confirm? "Cero" usually Auto-confirms? Let's check. 
-    // "Cero" -> handleInitialLiabilitiesStep says "Confirma tus PASIVOS ... Libre de deudas".
-    // And sets step to 'confirm_liabilities'.
-    // So user must Accept.
+    { input: 'retry', expected: 'Escríbelo de nuevo' },
+    { input: 'Debo 500k a Visa', expected: 'Confirma' }, // Re-enter Visa
+    { input: 'accept', expected: 'Radiografía' },
 
     // TUTORIAL - NO FLOW
     { input: 'no_wait', expected: 'Sin miedo' }, // "no_wait" payload or text? "Mmm... mejor no" is title. ID is 'no_wait'. Used ID.
@@ -40,7 +37,7 @@ const steps = [
     // BUT we also support ID if it was a button? No, here it's a list.
     // The previous code `handleExpenseAccountStep` checks `parseInt(message)`.
     // So sending "2" IS correct here.
-    { input: '2', expected: 'Listo' },
+    { input: 'Visa', expected: 'Listo' },
 
     // GOALS
     { input: 'Quiero un ferrari', expected: 'Última pregunta' },
