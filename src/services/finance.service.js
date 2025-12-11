@@ -8,6 +8,21 @@ const HybridCategorizer = require('./categorizer');
  */
 class FinanceService {
   /**
+   * Categoriza una transacción usando el categorizador híbrido
+   * @param {string} text - Descripción de la transacción
+   * @returns {string} - Categoría predicha
+   */
+  /**
+   * Categoriza una transacción usando el categorizador híbrido
+   * @param {string} text - Descripción de la transacción
+   * @returns {Promise<string>} - Categoría predicha
+   */
+  async categorizeTransaction(text) {
+    const result = await HybridCategorizer.categorize(text);
+    return result ? result.categoria : 'Otros';
+  }
+
+  /**
    * Registra una nueva transacción
    * @param {string} userId - ID del usuario (phone_number)
    * @param {string} type - Tipo: 'expense' o 'income'
@@ -89,6 +104,31 @@ class FinanceService {
         detectedByAI: detectedByAI,
         confidenceScore: confidence,
       });
+
+      // 4.5. Actualizar el saldo de la cuenta
+      // LOGIC:
+      // Asset (Efectivo, Banco): Gasto (subtract), Ingreso (add)
+      // Liability (Tarjeta, Deuda): Gasto (add/increase debt), Ingreso (subtract/pay off)
+
+      if (account) {
+        const isLiability = ['credit_card', 'loan', 'debt'].includes(account.type);
+        let operation = 'add';
+
+        if (isLiability) {
+          // Si es Pasivo
+          if (type === 'expense') operation = 'add'; // Aumenta la deuda (Gasto con TC)
+          else if (type === 'income') operation = 'subtract'; // Disminuye la deuda (Pagar TC)
+        } else {
+          // Si es Activo
+          if (type === 'expense') operation = 'subtract'; // Disminuye el dinero
+          else if (type === 'income') operation = 'add'; // Aumenta el dinero
+        }
+
+        // Case for 'Transfer'? (Usually handled as separate Expense/Income pair). 
+        // Current logic only sees 'expense' or 'income'.
+
+        await AccountDBService.updateBalance(account.account_id, amount, operation);
+      }
 
       // 5. Actualizar Racha (Streak)
       const today = new Date();

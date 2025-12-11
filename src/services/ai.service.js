@@ -107,6 +107,100 @@ class AIService {
   }
 
   /**
+   * Analiza el perfil financiero del usuario (Metas + Riesgo)
+   * @param {string} goalText - Texto del usuario sobre sus objetivos
+   * @param {string} riskText - Texto del usuario sobre reacción ante caídas del mercado
+   * @returns {Promise<Object>} - { goal_level: 1|2|3, risk_profile: 'conservative'|'moderate'|'aggressive', triage_text: string }
+   */
+  async analyzeFinancialProfile(goalText, riskText) {
+    try {
+      const prompt = `
+      Actúa como un Asesor Financiero experto. Analiza las respuestas de un nuevo usuario para clasificarlo.
+
+      INPUTS:
+      1. Objetivos: "${goalText}"
+      2. Reacción ante riesgo (Market Crash): "${riskText}"
+
+      TAREA 1: Clasificar Nivel de Objetivo (1, 2 o 3)
+      - Nivel 1 (Seguridad): Fondo de emergencia, seguros, salir de deudas, paz mental.
+      - Nivel 2 (Crecimiento): Comprar activos, vivienda, educación, aumentar patrimonio.
+      - Nivel 3 (Legado/Lifestyle): Viajes lujo, libertad financiera total, herencia, donaciones.
+
+      TAREA 2: Clasificar Perfil de Riesgo
+      - Conservative (Protector): Pánico al perder, prefiere seguridad total (CDTs, cuentas). "Vendo todo".
+      - Moderate (Equilibrado): Acepta volatilidad media por retorno.
+      - Aggressive (Crecimiento): Ve caídas como ofertas. "Compro más". Horizonte largo.
+
+      TAREA 3: Redactar un Triage Corto (Diagnóstico)
+      - Máximo 280 caracteres.
+      - Tono: Phill (Empático pero directo y experto).
+      - Menciona su "Perfil detected" y una recomendación inmediata.
+
+      OUTPUT JSON:
+      {
+        "goal_level": 1, 
+        "risk_profile": "conservative",
+        "triage_text": "Texto del diagnóstico..."
+      }
+      `;
+
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: [
+          { role: "system", content: "Eres un clasificador de perfiles financieros preciso." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      });
+
+      return JSON.parse(response.choices[0].message.content);
+    } catch (error) {
+      Logger.error('Error analizando perfil financiero', error);
+      // Fallback
+      return { goal_level: 1, risk_profile: 'moderate', triage_text: 'Perfil base configurado.' };
+    }
+  }
+
+  /**
+   * Extrae deudas y pasivos del texto
+   * @param {string} message 
+   * @returns {Promise<Object>} { liabilities: [{ name, amount, type: 'loan'|'credit_card'|'debt' }] }
+   */
+  async extractLiabilities(message) {
+    try {
+      const prompt = `
+      El usuario describe sus DEUDAS (Pasivos). Extrae cada deuda.
+      Texto: "${message}"
+
+      Tipos:
+      - 'credit_card': Tarjetas de crédito, Visa, Mastercard, American.
+      - 'loan': Préstamos bancarios, libranzas, créditos libre inversión, hipotecario, ICETEX.
+      - 'debt': "Culebras", deudas a personas, gota a gota, fiado.
+
+      Output JSON:
+      { "liabilities": [ { "name": "Visa", "amount": 100000, "type": "credit_card" } ] }
+      Si dice "No tengo deudas" o "Cero", devuelve array vacío.
+      `;
+
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: [
+          { role: "system", content: "Eres un extractor de datos financieros." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      });
+
+      return JSON.parse(response.choices[0].message.content);
+    } catch (error) {
+      Logger.error('Error extrayendo pasivos', error);
+      return { liabilities: [] };
+    }
+  }
+
+  /**
    * Obtiene las definiciones de herramientas para OpenAI
    */
   getTools() {

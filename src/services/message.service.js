@@ -97,6 +97,40 @@ class MessageService {
         return onboardingResponse;
       }
 
+      // 0.2. Comando para Deshacer última transacción (/revertir)
+      if (message.toLowerCase().trim() === '/revertir' || message.toLowerCase().trim() === '/deshacer') {
+        try {
+          // 1. Obtener última transacción
+          const hasSummary = await FinanceService.getUserSummary(userId); // Quick access to check count not optimal but handy, or use getRecent directly
+          const recent = await FinanceService.getRecentTransactions(userId, 1);
+
+          if (!recent || recent.length === 0) {
+            return "No encontré ninguna transacción reciente para deshacer. 🤷‍♂️";
+          }
+
+          const lastTx = recent[0];
+
+          // 2. Revertir saldo en cuenta
+          const AccountDBService = require('./db/account.db.service');
+
+          if (lastTx.account_id) {
+            // Si es Gasto -> Sumar al saldo (Devolver dinero)
+            // Si es Ingreso -> Restar al saldo (Quitar dinero)
+            const operation = lastTx.type === 'expense' ? 'add' : 'subtract';
+            await AccountDBService.updateBalance(lastTx.account_id, lastTx.amount, operation);
+          }
+
+          // 3. Eliminar transacción
+          await FinanceService.deleteTransaction(lastTx.transaction_id);
+
+          return `✅ Deshecho. He revertido tu ${lastTx.type === 'expense' ? 'gasto' : 'ingreso'} de ${formatCurrency(lastTx.amount)} en ${lastTx.category_name || 'General'}.`;
+
+        } catch (error) {
+          Logger.error('Error al revertir transacción', error);
+          return "Tuve un problema al intentar revertir la transacción. 😵‍💫";
+        }
+      }
+
       // 0.5. Verificar comandos de privacidad
       const lowerMsg = message.toLowerCase().trim();
       if (['silencio', 'hide', 'modo discreto', 'privacidad', '🤫', '🥷'].includes(lowerMsg)) {
@@ -114,6 +148,7 @@ class MessageService {
         return `Aquí tienes mis superpoderes. ¿Qué necesitas? 😎
 
 💸 *Registrar*: "Gasté 10 en café"
+↩️ *Corregir*: "/revertir" para borrar lo último
 📈 *Reporte*: "¿Cómo voy este mes?"
 🎨 *Visual*: "Resumen visual"
 🤫 *Privacidad*: Mándame un 🤫 para ocultar saldos.
@@ -428,7 +463,18 @@ class MessageService {
       // Generar mensaje de confirmación
       const typeText = type === 'expense' ? 'gasto' : 'ingreso';
       const emoji = type === 'expense' ? '💸' : '💰';
-      const accountText = transaction.account_name ? ` en ${transaction.account_name}` : '';
+
+      let accountText = "";
+      if (transaction.account_name) {
+        // Check if liability based on targetAccount OR fetch account details if not in hand
+        // We have targetAccount in scope usually
+        if (targetAccount && ['credit_card', 'loan', 'debt'].includes(targetAccount.type)) {
+          if (type === 'expense') accountText = ` (Aumentando deuda en ${transaction.account_name})`;
+          else accountText = ` (Disminuyendo deuda en ${transaction.account_name})`;
+        } else {
+          accountText = ` en ${transaction.account_name}`;
+        }
+      }
 
       let response = `${emoji} ¡Listo! Registré tu ${typeText} de ${formatCurrency(amount)} en *${category}*${accountText}.\n\n`;
 

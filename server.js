@@ -1,3 +1,4 @@
+process.env.TZ = 'America/Bogota';
 const createApp = require('./src/app');
 const { config, validateConfig } = require('./src/config/environment');
 const { testConnection, getPoolStats } = require('./src/config/database');

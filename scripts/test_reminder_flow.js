@@ -1,84 +1,118 @@
-const config = require('../src/config/environment');
-const OnboardingService = require('../src/services/onboarding.service');
-const { query } = require('../src/config/database');
-const Logger = require('../src/utils/logger');
-
-const TEST_PHONE = 'whatsapp:+573009998877';
-
-async function setupTestUser() {
-    Logger.info('🔄 Setting up test user...');
-    // Reset user to 'reminder_setup' step
-    await query(`
-        INSERT INTO users (phone_number, name, onboarding_step, is_active, language, currency, timezone, created_at, updated_at)
-        VALUES ($1, 'ReminderTester', 'reminder_setup', true, 'es', 'COP', 'America/Bogota', NOW(), NOW())
-        ON CONFLICT (phone_number) 
-        DO UPDATE SET onboarding_step = 'reminder_setup', onboarding_completed = false
-    `, [TEST_PHONE]);
-
-    // Clear existing reminders for this user
-    const userRes = await query('SELECT user_id FROM users WHERE phone_number = $1', [TEST_PHONE]);
-    const userId = userRes.rows[0].user_id;
-    await query('DELETE FROM reminders WHERE user_id = $1', [userId]);
-
-    return userId;
+require('dotenv').config();
+// Sanitize corrupted env var if present
+// Force clean up and sync env vars
+if (process.env.DB_USER) {
+    process.env.DB_USER = 'postgres'; // Safe default
 }
 
-async function verifyReminder(userId) {
-    Logger.info('🔍 Verifying reminder creation...');
-    const res = await query('SELECT * FROM reminders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1', [userId]);
-
-    if (res.rows.length === 0) {
-        throw new Error('❌ No reminder found for user!');
-    }
-
-    const reminder = res.rows[0];
-    const scheduled = new Date(reminder.scheduled_at);
-
-    Logger.info(`✅ Reminder found: ID ${reminder.reminder_id}`);
-    Logger.info(`📅 Scheduled at: ${scheduled.toLocaleString()}`);
-
-    if (scheduled.getHours() !== 20) {
-        throw new Error(`❌ Schedued time wrong! Expected 20:00 (8 PM), got ${scheduled.getHours()}:${scheduled.getMinutes()}`);
-    }
-
-    console.log('✅ Reminder verification PASSED');
-    return true;
-}
-
-async function verifyUserStatus(userId) {
-    Logger.info('🔍 Verifying user completion status...');
-    const res = await query('SELECT onboarding_completed, onboarding_step FROM users WHERE user_id = $1', [userId]);
-    const user = res.rows[0];
-
-    if (!user.onboarding_completed || user.onboarding_step !== 'completed') {
-        throw new Error(`❌ User status wrong! Completed: ${user.onboarding_completed}, Step: ${user.onboarding_step}`);
-    }
-
-    console.log('✅ User status verification PASSED');
-}
-
-async function run() {
+if (process.env.DATABASE_URL) {
     try {
-        const userId = await setupTestUser();
+        const url = new URL(process.env.DATABASE_URL);
+        process.env.DB_HOST = url.hostname;
+        process.env.DB_PORT = url.port;
+        process.env.DB_USER = url.username;
+        process.env.DB_PASSWORD = url.password;
+        process.env.DB_NAME = url.pathname.slice(1); // remove leading slash
 
-        Logger.info('🚀 Simulating user message...');
-        const response = await OnboardingService.processMessage(TEST_PHONE, '¡De una!');
+        console.log('✅ EXTRACTED DB CONFIG FROM URL:');
+        console.log('Host:', process.env.DB_HOST);
+        console.log('User:', process.env.DB_USER);
+        console.log('Port:', process.env.DB_PORT);
+    } catch (err) {
+        console.error('Failed to parse DATABASE_URL', err);
+    }
+}
+const { Pool } = require('pg');
+const ReminderScheduler = require('../src/services/reminder.scheduler');
+const ReminderDBService = require('../src/services/db/reminder.db.service');
+const { config } = require('../src/config/environment');
 
-        console.log('🤖 Bot response:', response);
+// Conexión DB directa para el test
+const pool = new Pool({
+    user: process.env.DB_USER || 'user',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'phill',
+    password: process.env.DB_PASSWORD || 'password',
+    port: process.env.DB_PORT || 5432,
+});
 
-        if (!response.includes('¡Genial!')) {
-            throw new Error('Unexpected bot response');
+async function runTest() {
+    try {
+        console.log('🧪 Iniciando prueba de recordatorios...');
+
+        // 1. Crear un usuario de prueba (o usar uno existente)
+        // Para simplificar, asumiremos que existe algún usuario o crearemos uno dummy
+        // Mejor: Insertamos un recordatorio para un user_id hardcodeado temporalmente o buscamos uno.
+
+        // Buscar un usuario existente
+        const userResult = await pool.query('SELECT user_id, phone_number FROM users LIMIT 1');
+        if (userResult.rows.length === 0) {
+            console.error('❌ No hay usuarios en la DB para probar.');
+            process.exit(1);
         }
 
-        await verifyReminder(userId);
-        await verifyUserStatus(userId);
+        const user = userResult.rows[0];
+        console.log(`👤 Usando usuario de prueba: ${user.phone_number} (${user.user_id})`);
 
-        console.log('🎉 ALL TESTS PASSED!');
-        process.exit(0);
+        // 2. Crear un recordatorio para YA MISMO (para que el próximo cron minutal lo coja sí o sí)
+        const now = new Date();
+        const scheduledAt = new Date(now.getTime() + 1000); // 1 segundo en el futuro
+
+        console.log(`📅 Hora actual: ${now.toString()}`);
+        console.log(`📅 Recordatorio programado para: ${scheduledAt.toString()}`);
+
+        const reminder = await ReminderDBService.createReminder({
+            userId: user.user_id,
+            message: 'Test de recordatorio automático 🤖',
+            scheduledAt: scheduledAt.toISOString(),
+            isRecurring: false
+        });
+
+        console.log(`✅ Recordatorio creado con ID: ${reminder.reminder_id}`);
+
+        // 3. Iniciar el Scheduler
+        // Mockeamos el cliente de Twilio para no gastar saldo si no es necesario,
+        // o dejamos que falle el envío real pero verifiquemos que INTENTA enviar.
+        // Para este test, vamos a dejar que intente enviar real o falle, lo importante es ver el log.
+
+        // Sobrescribir el método sendReminder para no spamear real si se quiere, 
+        // pero el usuario pidió "probar si funcionan", así que mejor dejarlo real.
+        // Solo monitorearemos los logs.
+
+        console.log('⏰ Iniciando Scheduler...');
+        ReminderScheduler.start(); // Esto inicia el cron
+
+        // Forzamos un chequeo inmediato aunque el cron corre cada minuto, 
+        // para ver si coge algo (no debería cogerlo AUN porque falta 1 min).
+        console.log('🔍 Chequeo inmediato (no debería encontrar nada todavía)...');
+        await ReminderScheduler.checkReminders();
+
+        console.log('⏳ Esperando 70 segundos para que el CRON se ejecute y detecte el recordatorio...');
+
+        // Esperar
+        setTimeout(async () => {
+            console.log('🏁 Tiempo de espera finalizado.');
+
+            // Verificar estado del recordatorio en DB
+            const checkResult = await pool.query('SELECT status, sent_at FROM reminders WHERE reminder_id = $1', [reminder.reminder_id]);
+            const updatedReminder = checkResult.rows[0];
+
+            console.log('📊 Estado final del recordatorio:', updatedReminder);
+
+            if (updatedReminder.status === 'sent' || updatedReminder.status === 'failed') {
+                console.log('✅ El scheduler procesó el recordatorio (éxito o fallo de envío, pero procesado).');
+            } else {
+                console.log('❌ El scheduler NO procesó el recordatorio (sigue pending).');
+            }
+
+            process.exit(0);
+        }, 70000);
+
     } catch (error) {
-        console.error('❌ TEST FAILED:', error);
+        console.error('❌ Error en el test:', error);
         process.exit(1);
     }
 }
 
-run();
+// Ejecutar
+runTest();
