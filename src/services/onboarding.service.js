@@ -33,7 +33,7 @@ class OnboardingService {
             if (!user) throw new Error('Usuario no encontrado');
 
             const step = user.onboarding_data?.step || 'name_input';
-            Logger.info(`[DEBUG] User ${user.phone_number} step: ${step}`);
+
             const cleanMessage = message.trim();
 
             switch (step) {
@@ -116,7 +116,7 @@ class OnboardingService {
 
     async handleTermsAcceptanceStep(user, message) {
         const action = message.toLowerCase();
-        Logger.info(`[DEBUG] handleTermsAcceptanceStep input: '${message}', action: '${action}'`);
+
 
         if (action.includes('leer') || action.includes('terms')) {
             return {
