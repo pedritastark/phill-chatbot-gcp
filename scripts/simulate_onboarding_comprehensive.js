@@ -20,7 +20,7 @@ const steps = [
 
     // LIABILITIES - RETRY FLOW -> THEN ACCEPT VISA
     { input: 'Debo 500k a Visa', expected: 'Confirma' },
-    { input: 'retry', expected: 'Escríbelo de nuevo' },
+    { input: 'retry', expected: 'cuéntame de nuevo' },
     { input: 'Debo 500k a Visa', expected: 'Confirma' }, // Re-enter Visa
     { input: 'accept', expected: 'Radiografía' },
 
