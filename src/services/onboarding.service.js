@@ -138,7 +138,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Excelente! Ya somos equipo. 🤝💜\\n\\n1️⃣ **FASE 1: RADIOGRAFÍA** 📸\\nNecesito conocer la situación de tu dinero.\\n\\nCuéntame, **¿Qué TIENES hoy?** (Activos)\\nDime cuánto DINERO tienes en Efectivo, Bancos, Nequi, Bolsillos, etc.\\n\\nEjemplo: \"Tengo 50k en efectivo y 2 millones en el banco\".`
+            message: `¡Excelente! Ya somos equipo. 🤝💜\n\n1️⃣ **FASE 1: RADIOGRAFÍA** 📸\nNecesito conocer la situación de tu dinero.\n\nCuéntame, **¿Qué TIENES hoy?** (Activos)\nDime cuánto DINERO tienes en Efectivo, Bancos, Nequi, Bolsillos, etc.\n\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`
         };
     }
 
@@ -216,7 +216,7 @@ class OnboardingService {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💾\\n\\n**Tu Dinero Total: ${formatCurrency(totalAssets)}** 💰\\n\\nAhora vamos con lo difícil... **¿Qué DEBES?** (Pasivos) 📉\\n\\nSácame de dudas: Tarjetas de crédito, préstamos, personas a las que les debes, etc.\\n\\nEjemplo: \"Debo 2M en Visa y 500k a mi tía\". (Si estás libre de deudas, escribe \"Cero\").`;
+        return `¡Guardado! 💾\n\n**Tu Dinero Total: ${formatCurrency(totalAssets)}** 💰\n\nAhora vamos con lo difícil... **¿Qué DEBES?** (Pasivos) 📉\n\nSácame de dudas: Tarjetas de crédito, préstamos, personas a las que les debes, etc.\n\nEjemplo: "Debo 2M en Visa y 500k a mi tía". (Si estás libre de deudas, escribe "Cero").`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -455,7 +455,7 @@ class OnboardingService {
             onboarding_data: { step: 'diagnosis_display' }
         });
 
-        return `🔍 **DIAGNÓSTICO PHILL**\\n\\n${analysis.triage_text}\\n\\nVeo que tienes una meta clara y tu perfil de riesgo influye en cómo lograrla.\\n\\nHe configurado tu plan. 🏁\\n\\n¿Qué te pareció este inicio? (Califícame para mejorar)`;
+        return `🔍 **DIAGNÓSTICO PHILL**\n\n${analysis.triage_text}\n\nVeo que tienes una meta clara y tu perfil de riesgo influye en cómo lograrla.\n\nHe configurado tu plan. 🏁\n\n¿Qué te pareció este inicio? (Califícame para mejorar)`;
     }
 
     async handleDiagnosisRatingStep(user, message) {
