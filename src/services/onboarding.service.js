@@ -138,7 +138,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Excelente! Ya somos equipo. 🤝💜\n\n1️⃣ **FASE 1: RADIOGRAFÍA** 📸\nNecesito ver la realidad "desnuda" de tu dinero.\n\nCuéntame, **¿Qué TIENES hoy?** (Activos)\nDime cuánto tienes en Efectivo, Bancos, Nequi, Bolsillos, etc.\n\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`
+            message: `¡Excelente! Ya somos equipo. 🤝💜\n\n1️⃣ **FASE 1: RADIOGRAFÍA** 📸\nNecesito conocer la situación de tu dinero.\n\nCuéntame, **¿Qué TIENES hoy?** (Activos)\nDime cuánto tienes en Efectivo, Bancos, Nequi, Bolsillos, etc.\n\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`
         };
     }
 
@@ -216,7 +216,7 @@ class OnboardingService {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💾\n\n**Activos Totales: ${formatCurrency(totalAssets)}** 💰\n\nAhora vamos con lo difícil... **¿Qué DEBES?** (Pasivos) 📉\n\nSácame de dudas: Tarjetas de crédito, préstamos, 'culebras', etc.\n\nEjemplo: "Debo 2M en Visa y 500k a mi tía". (Si estás libre de deudas, escribe "Cero").`;
+        return `¡Guardado! 💾\n\n**Activos Totales: ${formatCurrency(totalAssets)}** 💰\n\nAhora vamos con lo difícil... **¿Qué DEBES?** (Pasivos) 📉\n\nSácame de dudas: Tarjetas de crédito, préstamos, gastos inesperados, etc.\n\nEjemplo: "Debo 2M en Visa y 500k a mi tía". (Si estás libre de deudas, escribe "Cero").`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -297,7 +297,7 @@ class OnboardingService {
         });
 
         return {
-            message: `Listo la radiografía. 🩻\n\n💰 **Activos:** ${formatCurrency(assets)}\n📉 **Pasivos:** ${formatCurrency(totalLiabilities)}\n💎 **Patrimonio Neto:** ${formatCurrency(netWorth)}\n\nAhora, **FASE 2: EL HÁBITO** 🧠\n\nLa gente cree que gasta X, pero en realidad gasta Y. Esas "fugas" te están matando.\n\nVamos a hacer una prueba real ya mismo. ¿Listo para registrar tu primer movimiento y cerrar la brecha?`,
+            message: `Listo la radiografía. 🩻\n\n💰 **Dinero líquido:** ${formatCurrency(assets)}\n📉 **Pasivos (deudas):** ${formatCurrency(totalLiabilities)}\n\nAhora, **FASE 2: EL HÁBITO** 🧠\n\nLa gente cree que gasta X, pero en realidad gasta Y. Estas "fugas" te están afectando.\n\nVamos a hacer una prueba real ya mismo. ¿Listo para registrar tu primer movimiento y cerrar la brecha?`,
             buttons: [
                 { id: 'yes_start', title: 'Sí, ¡Vamos con eso! 🔥' },
                 { id: 'no_wait', title: 'Mmm... mejor no 🐢' }
