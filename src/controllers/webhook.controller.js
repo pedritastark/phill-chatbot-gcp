@@ -102,7 +102,7 @@ class WebhookController {
       Logger.info(`Preview: "${logMsg.substring(0, 100)}${logMsg.length > 100 ? '...' : ''}"`);
       Logger.debug(`TwiML: ${twiml}`); // Debug log
 
-      return res.set('Content-Type', 'text/xml').send(twiml.toString());
+      return res.type('text/xml').send(twiml.toString());
 
     } catch (error) {
       Logger.error('Error en el webhook', error);
