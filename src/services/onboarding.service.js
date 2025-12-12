@@ -270,6 +270,7 @@ class OnboardingService {
 
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: {
+                ...user.onboarding_data,
                 step: 'confirm_liabilities',
                 temp_liabilities: tempLiabilities,
                 liabilities_summary_text: summary
