@@ -5,12 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "TZ=America/Bogota node server.js",
-    "dev": "TZ=America/Bogota nodemon server.js",
-    "check-env": "node scripts/check-env.js",
-    "test:messages": "node scripts/test-message-splitting.js",
-    "db:setup": "node scripts/db-setup.js",
-    "db:migrate": "node scripts/db-migrate.js",
-    "db:seed": "node scripts/db-seed.js"
+    "dev": "TZ=America/Bogota nodemon server.js"
   },
   "keywords": [
     "twilio",

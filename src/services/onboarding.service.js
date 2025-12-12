@@ -108,7 +108,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar con la magia, pongámonos serios un segundo: Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a hacer crecer tu dinero, pongámonos serios un segundo. Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
             buttons: [{ id: 'accept', title: 'Acepto' }, { id: 'terms', title: 'Leer Términos' }]
         };
     }
@@ -120,7 +120,7 @@ class OnboardingService {
 
         if (action.includes('leer') || action.includes('terms')) {
             return {
-                message: "📜 **Términos y Condiciones**\n\n1. Tus datos son tuyos. No los vendemos.\n2. La IA usa tus datos solo para darte insights.\n3. Puedes borrar todo escribiendo /reset.\n4. No somos un banco, somos una herramienta educativa.\n\n¿Aceptas para continuar? 💜",
+                message: "📜 **Términos y Condiciones**\n\n1. Tus datos son tuyos. No los vendemos.\n2. El modelo de IA que usamos, solo usa tus datos solo para darte una mejor comprensión de lo que necesitas.\n3. Puedes borrar toda tu información escribiendo /reset.\n4. No somos un banco, somos una herramienta educativa.\n\n¿Aceptas para continuar? 💜",
                 buttons: [
                     { id: 'accept', title: 'Acepto (Ahora sí)' }
                 ]
@@ -138,22 +138,48 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Excelente! Ya somos equipo. 🤝💜\n\n1️⃣ **FASE 1: RADIOGRAFÍA** 📸\nNecesito conocer la situación de tu dinero.\n\nCuéntame, **¿Qué TIENES hoy?** (Activos)\nDime cuánto DINERO tienes en Efectivo, Bancos, Nequi, Bolsillos, etc.\n\nEjemplo: "Tengo 50k en efectivo y 2 millones en el banco".`
+            message: `¡Trato hecho! 🤝💜\n\nVamos a armar tu mapa financiero.\n\nPara ayudarte a crecer, primero necesito saber tu **Punto de Partida**. No necesito centavos exactos, con aproximados basta.\n\n¿Dónde tienes tu dinero hoy? (Ej: "300k en Nequi, 2M en Bancolombia y 50k en la billetera").`
         };
     }
 
     async handleInitialAssetsStep(user, message) {
         const AIService = require('./ai.service');
+        // FIX: Detectar intencionalidad de cero
+        if (message.toLowerCase().includes('nada') || message.toLowerCase().includes('cero')) {
+            // Crear cuenta dummy con 0
+            const accounts = [{ name: 'Efectivo', balance: 0, type: 'cash' }];
+
+            // Prepare preview for Zero case
+            let totalAssets = 0;
+            const summary = "Confirma si entendí bien lo que tienes:\n\n✅ Efectivo: $0\n\n💰 Total: $0";
+
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: {
+                    step: 'confirm_assets',
+                    temp_assets: accounts,
+                    assets_summary_text: summary
+                }
+            });
+
+            return {
+                message: summary,
+                buttons: [
+                    { id: 'accept', title: '✅ Está perfecto' },
+                    { id: 'retry', title: '✏️ Modificar' }
+                ]
+            };
+        }
+
         const extracted = await AIService.extractInitialBalances(message);
         const accounts = extracted.accounts || [];
 
         if (accounts.length === 0) {
-            return "No logré entender los montos. 🤔 Intenta de nuevo: 'Efectivo: 50k, Banco: 1m'.";
+            return "Mmm, mi cerebro de IA se confundió con los números 😵‍💫.\n\nIntenta ponerlo así de simple:\n'Nequi 200000, Efectivo 50000'";
         }
 
         // Prepare preview
         let totalAssets = 0;
-        let summary = "Confirma si entendí bien tus ACTIVOS:\n\n";
+        let summary = "Confirma si entendí bien lo que tienes:\n\n";
         for (const acc of accounts) {
             totalAssets += acc.balance;
             summary += `✅ ${acc.name}: ${formatCurrency(acc.balance)}\n`;
@@ -216,7 +242,7 @@ class OnboardingService {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💾\n\n**Tu Dinero Total: ${formatCurrency(totalAssets)}** 💰\n\nAhora vamos con lo difícil... **¿Qué DEBES?** (Pasivos) 📉\n\nSácame de dudas: Tarjetas de crédito, préstamos, personas a las que les debes, etc.\n\nEjemplo: "Debo 2M en Visa y 500k a mi tía". (Si estás libre de deudas, escribe "Cero").`;
+        return `¡Guardado! 💾\n\n**Tu Liquidez Total: ${formatCurrency(totalAssets)}**\n\nAhora vamos a la parte que a nadie le gusta, pero es necesaria para tener paz mental: **Las Deudas** 📉\n\n¿Tienes algún saldo pendiente? (Tarjetas, préstamos, o lo que le debes a un amigo).\n\nSi eres libre, escribe con orgullo "Cero".`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -236,9 +262,9 @@ class OnboardingService {
                 return "No entendí tus deudas. 🧐 Escribe 'Debo X en Y' o 'Cero' si no tienes.";
             }
 
-            summary = "Confirma tus PASIVOS:\n\n";
+            summary = "Confirma tus DEUDAS:\n\n";
             for (const debt of tempLiabilities) {
-                summary += `🛑 ${debt.name}: ${formatCurrency(debt.amount)}\n`;
+                summary += `🔴 ${debt.name}: ${formatCurrency(debt.amount)}\n`;
             }
         }
 
@@ -253,7 +279,7 @@ class OnboardingService {
         return {
             message: summary,
             buttons: [
-                { id: 'accept', title: '✅ Correcto' },
+                { id: 'accept', title: '✅ Perfecto' },
                 { id: 'retry', title: '✏️ Corregir' }
             ]
         };
@@ -297,7 +323,7 @@ class OnboardingService {
         });
 
         return {
-            message: `Listo la radiografía. 🩻\n\n💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\nAhora, **FASE 2: EL HÁBITO** 🧠\n\nLa gente cree que gasta X, pero en realidad gasta Y. Estas "fugas" te están afectando.\n\nVamos a hacer una prueba real ya mismo. ¿Listo para registrar tu primer movimiento y cerrar la brecha?`,
+            message: `Lista la primera parte. \n\n💰💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\nAhora, ** 2.EL HÁBITO** 🧠\n\n Usualmente la gente cree que gasta menos dinero que lo que gasta. Estas "fugas" te están afectando.\n\nVamos a hacer una prueba de lo que puedo hacer. ¿Listo para registrar tu primer movimiento?`,
             buttons: [
                 { id: 'yes_start', title: 'Sí, ¡Vamos con eso! 🔥' },
                 { id: 'no_wait', title: 'Mmm... mejor no 🐢' }
@@ -310,7 +336,7 @@ class OnboardingService {
             await UserDBService.updateUser(user.phone_number, {
                 onboarding_data: { step: 'first_expense' }
             });
-            return "¡Sin miedo! Es solo un ejercicio. 😉 Necesitamos romper el hielo con tu billetera. \n\nDime un gasto pequeño (un café, un pasaje) que hayas hecho hoy. ¡Hazlo por tu 'yo' del futuro!";
+            return "¡Sin miedo! Es solo un ejercicio. 😉 Necesitamos ver que entiendes como funciona. \n\n Estas listo?";
         }
 
         await UserDBService.updateUser(user.phone_number, {
@@ -361,10 +387,20 @@ class OnboardingService {
         });
 
         const accounts = await AccountDBService.findByUser(user.user_id);
+
+        // --- FIX: Evita crash si no hay cuentas ---
+        if (!accounts || accounts.length === 0) {
+            // Crear una cuenta por defecto de emergencia
+            const defaultAcc = await AccountDBService.create({
+                userId: user.user_id, name: 'Efectivo', type: 'cash', balance: 0, isDefault: true
+            });
+            accounts.push(defaultAcc);
+        }
+        // ------------------------------------------
         const buttons = accounts.slice(0, 3).map(a => ({ id: a.name, title: a.name }));
 
         return {
-            message: `Ok, ${formatCurrency(amount)}. ¿De dónde salió la plata? 👇`,
+            message: `Ok, ${formatCurrency(amount)}. Ahora, ¿De dónde salió la plata? 👇`,
             buttons: buttons
         };
     }
@@ -372,26 +408,36 @@ class OnboardingService {
     async handleExpenseAccountStep(user, message) {
         const accounts = await AccountDBService.findByUser(user.user_id);
         let target = null;
+        let warningMsg = "";
 
-        // 1. Try numeric selection (1-3)
-        const selectionIndex = parseInt(message.trim());
-        if (!isNaN(selectionIndex) && selectionIndex >= 1 && selectionIndex <= accounts.length) {
-            target = accounts[selectionIndex - 1]; // 0-indexed
-        } else {
-            // 2. Try name match
+        const cleanMsg = message.trim();
+        // Solo intentar índice si el mensaje es corto (ej: "1", "2", "3")
+        const isNumericSelection = /^\d+$/.test(cleanMsg);
+
+        if (isNumericSelection) {
+            const idx = parseInt(cleanMsg);
+            if (idx >= 1 && idx <= accounts.length) {
+                target = accounts[idx - 1]; // 0-indexed
+            }
+        }
+
+        // Si no fue numérico o no encontró por ID, busca por nombre...
+        if (!target) {
+            // 2. Try name match (case insensitive)
             target = accounts.find(a => a.name.toLowerCase().includes(message.toLowerCase()));
         }
 
-        // Fallback: If still not found, just use the first one or Default
+        // Fallback: If still not found, just use default or first
         if (!target) {
             target = accounts.find(a => a.is_default) || accounts[0];
+            warningMsg = `(No encontré "${message}", así que lo puse en ${target.name} 😅). `;
         }
 
         const data = user.onboarding_data;
         const expense = data.pending_expense;
 
         // Register Transaction
-        const FinanceService = require('./finance.service');
+        // FinanceService already imported at top level
         const category = await FinanceService.categorizeTransaction(expense.description);
 
         await FinanceService.createTransaction(
@@ -413,12 +459,12 @@ class OnboardingService {
         let transactionMsg = "";
 
         if (isLiability) {
-            transactionMsg = `🛑 Se aumentó tu deuda en ${target.name} por ${formatCurrency(expense.amount)}`;
+            transactionMsg = `🔴 Deuda aumentada en ${target.name} por ${formatCurrency(expense.amount)}`;
         } else {
             transactionMsg = `✅ Descontado de ${target.name}`;
         }
 
-        return `¡Listo! ${transactionMsg}.\n\n📂 **Categoría:** ${category}\n\n💡 **Dato Curioso:**\nTus gastos se organizan automáticamente. Así luego podrás preguntarme cosas como:\n_"¿Cuánto he gastado en transporte este mes?"_ ó _"¿En qué se me fue la plata la semana pasada?"_\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\n¿Para qué quieres organizar tu dinero?\n\nEjemplos:\n- "Quiero comprar una moto"\n- "Salir de deudas"\n- "Viajar a Europa"\n- "Tener paz mental"`;
+        return `¡Listo! ${warningMsg}${transactionMsg}.\n\n📂 **Categoría:** ${category}\n\n💡 **Dato Curioso:**\nTus gastos se organizan automáticamente. Así luego podrás preguntarme cosas como:\n_"¿Cuánto he gastado en transporte este mes?"_ ó _"¿En qué se me fue la plata la semana pasada?"_\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\n¿Para qué quieres organizar tu dinero?\n\nEjemplos:\n- "Quiero comprar una moto"\n- "Salir de deudas"\n- "Viajar a Europa"\n- "Tener paz mental"`;
     }
 
     async handleGoalsStep(user, message) {
@@ -430,7 +476,7 @@ class OnboardingService {
             }
         });
 
-        return `Anotado. 🎯\n\nÚltima pregunta vital (Psicología pura 🧠):\n\nSi mañana tus inversiones caen un 20% por una crisis mundial...\n\nA) ¿Vendes todo en pánico para no perder más? 😱\nB) ¿Esperas tranquilo? 😐\nC) ¿Aprovechas y compras más barato? 🤑\n\n(Dime qué harías sinceramente).`;
+        return `Anotado. 🎯\n\nÚltima pregunta vital (Psicología pura 🧠):\n\nSi mañana tus inversiones caen un 20% por una crisis mundial..., que harías?\n\nA) ¿Vendes todo en pánico para no perder más? 😱\nB) ¿Esperas tranquilo? 😐\nC) ¿Aprovechas y compras más barato? 🤑\n\n(Dime qué harías sinceramente).`;
     }
 
     async handleRiskProfileStep(user, message) {
@@ -455,7 +501,7 @@ class OnboardingService {
             onboarding_data: { step: 'diagnosis_display' }
         });
 
-        return `🔍 **DIAGNÓSTICO PHILL**\n\n${analysis.triage_text}\n\nVeo que tienes una meta clara y tu perfil de riesgo influye en cómo lograrla.\n\nHe configurado tu plan. 🏁\n\n¿Qué te pareció este inicio? (Califícame para mejorar)`;
+        return `🔍 **DIAGNÓSTICO FINAL DE PHILL**\n\n${analysis.triage_text}\n\nVeo que tienes una meta clara y tu perfil de riesgo influye en cómo lograrla.\n\nHe configurado tu plan. 🏁\n\n¿Qué te pareció este inicio? (Califícame para mejorar)`;
     }
 
     async handleDiagnosisRatingStep(user, message) {
@@ -482,7 +528,7 @@ class OnboardingService {
             onboarding_rating: 5 // Default or parsed
         });
 
-        return `¡Gracias! ⭐⭐⭐⭐⭐\n\nTu transformación financiera empieza hoy. Te escribiré a las 8 PM. ¡A romperla! 🔥💜`;
+        return `¡Gracias! ⭐⭐⭐⭐⭐\n\nTu transformación financiera empieza hoy.\n\n🔔 **Mi compromiso:** Te escribiré cada noche a las 8 PM para cerrar el día (puedes cambiar la hora después escribiendo /config).\n\n¡A romperla! 🔥💜`;
     }
 
     parseAmount(text) {
