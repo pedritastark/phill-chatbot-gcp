@@ -6,8 +6,7 @@ class RulesLayer {
             'Transporte': ['uber', 'didi', 'cabify', 'taxi', 'metro', 'transmilenio', 'bus', 'gasolina', 'parqueadero', 'peaje', 'taller'],
             'Entretenimiento': ['cine', 'netflix', 'spotify', 'bar', 'discoteca', 'concierto', 'estadio', 'teatro', 'bolera', 'hbo'],
             'Salud': ['drogueria', 'farmatodo', 'cruz verde', 'medico', 'odontologo', 'gimnasio', 'smartfit', 'bodytech', 'eps'],
-            'Servicios': ['claro', 'movistar', 'tigo', 'etb', 'enel', 'vanti', 'acueducto', 'luz', 'agua', 'gas', 'internet'],
-            'Ingreso': ['sueldo', 'salario', 'venta', 'pago', 'ingreso', 'nomina', 'honorarios', 'mesada', 'quincena', 'prima']
+            'Servicios': ['claro', 'movistar', 'tigo', 'etb', 'enel', 'vanti', 'acueducto', 'luz', 'agua', 'gas', 'internet']
         };
     }
 

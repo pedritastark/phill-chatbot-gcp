@@ -17,7 +17,7 @@ class OnboardingService {
                 onboarding_data: { step: 'name_input' }
             });
 
-            return "¡Hola! 👋 Soy Phill, tu nuevo **asistente financiero con IA**.\n\nMi misión es simple: que dejes de estresarte por el dinero y empieces a hacerlo crecer. 🚀\n\nYo ya me presenté... ¿y tú eres? (Dime tu nombre o cómo te gusta que te llamen) 👇";
+            return "¡Hola! 👋 Soy Phill, tu nuevo asistente financiero con IA.\n\nMi misión es simple: que dejes de estresarte por el dinero y empieces a hacerlo crecer. 🚀\n\nYo ya me presenté... ¿y tú eres? (Dime tu nombre o cómo te gusta que te llamen) 👇";
         } catch (error) {
             Logger.error(`Error iniciando onboarding para ${userId}`, error);
             throw error;
@@ -70,12 +70,6 @@ class OnboardingService {
                 case 'expense_account':
                     return await this.handleExpenseAccountStep(user, cleanMessage);
 
-                case 'income_source_input': // NEW: Income Source
-                    return await this.handleIncomeSourceStep(user, cleanMessage);
-
-                case 'challenges_input': // NEW: Challenges
-                    return await this.handleChallengesStep(user, cleanMessage);
-
                 case 'goals_input': // NEW: Goals
                     return await this.handleGoalsStep(user, cleanMessage);
 
@@ -114,7 +108,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a hacer crecer tu dinero, pongámonos serios un segundo. **Tu privacidad es sagrada para mí**.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a hacer crecer tu dinero, pongámonos serios un segundo. Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
             buttons: [{ id: 'accept', title: 'Acepto' }, { id: 'terms', title: 'Leer Términos' }]
         };
     }
@@ -248,7 +242,7 @@ class OnboardingService {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💾\n\n**Tu Liquidez Total: ${formatCurrency(totalAssets)}**\n\n¿Tienes algún saldo pendiente? (Tarjetas, préstamos, o lo que le debes a un amigo). ["Cero" si no tienes deudas]`;
+        return `¡Guardado! 💾\n\n**Tu Liquidez Total: ${formatCurrency(totalAssets)}**\n\n\nAhora vamos a la parte que a nadie le gusta, pero es necesaria para tener paz mental: **Las Deudas** 📉\n\n¿Tienes algún saldo pendiente? (Tarjetas, préstamos, o lo que le debes a un amigo).\n\nSi eres libre, escribe con orgullo "Cero".`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -330,7 +324,7 @@ class OnboardingService {
         });
 
         return {
-            message: `Lista la primera parte. \n\n💰💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\n\nAhora, ** 2.EL HÁBITO** 🧠\n\n Usualmente la gente cree que gasta o gana x dinero pero no lo sabe con exactitud.\n\nVamos a hacer una prueba de lo que puedo hacer. ¿Listo para registrar tu primer movimiento?`,
+            message: `Lista la primera parte. \n\n💰💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\n\nAhora, ** 2.EL HÁBITO** 🧠\n\n Usualmente la gente cree que gasta menos dinero que lo que gasta. Estas "fugas" te están afectando.\n\nVamos a hacer una prueba de lo que puedo hacer. ¿Listo para registrar tu primer movimiento?`,
             buttons: [
                 { id: 'yes_start', title: 'Sí, ¡Vamos con eso! 🔥' },
                 { id: 'no_wait', title: 'Mmm... mejor no 🐢' }
@@ -350,28 +344,32 @@ class OnboardingService {
             onboarding_data: { step: 'first_expense' }
         });
 
-        return "¡Esa es la actitud! 💪\n\nUna de mis funciones como asistente financiero es registrar tus **gastos** o **ingresos** para que sepas exactamente a dónde va tu plata y de dónde viene. 📉📈\n\nPor eso quiero que hagas una prueba: dime un gasto o un ingreso, el último que recuerdes haber tenido.\n\nEjemplo: 'Me comí una empanada de 3k', 'Pagué 50k de internet' o 'Recibí 200k de un trabajo'.";
+        // Updated Message per user request
+        return "Una de mis funciones como asistente financiero es registrar tus **gastos** o **ingresos**.\n\nPor eso quiero que hagas una prueba: dime un gasto o ingreso, el último que recuerdes haber tenido.\n\nEjemplos:\n- 'Me pagaron 100k'\n- 'Gasté 20k en uber'\n- 'Me encontré 50k'";
     }
 
     async handleFirstExpenseStep(user, message) {
-        const amount = this.parseAmount(message);
-        if (amount === 0) return "No vi el monto. Intenta: '10k en taxi' o 'Recibí 50k'.";
+        const AIService = require('./ai.service');
+        const analysis = await AIService.analyzeTransaction(message);
 
-        // Categorize to detect Type (Income/Expense)
-        const categoryName = await FinanceService.categorizeTransaction(message);
-        const isIncome = categoryName === 'Ingreso';
-        const type = isIncome ? 'income' : 'expense';
-        const typeLabel = isIncome ? 'Ingreso' : 'Gasto';
+        const amount = analysis.amount;
+        if (amount === 0) return "No vi el monto. Intenta: '10k en taxi' o 'Gané 50k'.";
 
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: {
                 step: 'confirm_first_expense',
-                pending_expense: { amount, description: message, type, category: categoryName, typeLabel }
+                pending_transaction: {
+                    amount: amount,
+                    description: analysis.description,
+                    type: analysis.type // 'income' or 'expense'
+                }
             }
         });
 
+        const typeLabel = analysis.type === 'income' ? 'INGRESO 💰' : 'GASTO 💸';
+
         return {
-            message: `Voy a registrar este **${typeLabel}** de **${formatCurrency(amount)}**\nDetalle: "${message}"\nCategoría detectada: ${categoryName}\n\n¿Es correcto?`,
+            message: `Voy a registrar: **${formatCurrency(amount)}** (${typeLabel})\nDetalle: "${analysis.description}"\n\n¿Es correcto?`,
             buttons: [
                 { id: 'accept', title: '✅ Sí, registrar' },
                 { id: 'retry', title: '✏️ Corregir' }
@@ -385,11 +383,15 @@ class OnboardingService {
             await UserDBService.updateUser(user.phone_number, {
                 onboarding_data: { step: 'first_expense' }
             });
-            return "Vale, dime el movimiento de nuevo (Ej: '10k taxi' o '50k venta'):";
+            return "Vale, dime el movimiento de nuevo:";
         }
 
         const data = user.onboarding_data;
-        const amount = data.pending_expense.amount;
+        const transaction = data.pending_transaction; // Now using pending_transaction object
+
+        // Fallback backward compatibility if pending_expense is still there during migration
+        const amount = transaction ? transaction.amount : data.pending_expense.amount;
+        const type = transaction ? transaction.type : 'expense';
 
         // Move to Account Selection
         await UserDBService.updateUser(user.phone_number, {
@@ -403,7 +405,6 @@ class OnboardingService {
 
         // --- FIX: Evita crash si no hay cuentas ---
         if (!accounts || accounts.length === 0) {
-            // Crear una cuenta por defecto de emergencia
             const defaultAcc = await AccountDBService.create({
                 userId: user.user_id, name: 'Efectivo', type: 'cash', balance: 0, isDefault: true
             });
@@ -412,8 +413,15 @@ class OnboardingService {
         // ------------------------------------------
         const buttons = accounts.slice(0, 3).map(a => ({ id: a.name, title: a.name }));
 
+        let question = "";
+        if (type === 'income') {
+            question = `Ok, ${formatCurrency(amount)}. ¿A qué cuenta **ENTRÓ** el dinero? 👇`;
+        } else {
+            question = `Ok, ${formatCurrency(amount)}. ¿De dónde **SALIÓ** el dinero? 👇`;
+        }
+
         return {
-            message: `Ok, ${formatCurrency(amount)}. Ahora, ¿De dónde salió (o a dónde entró) la plata? 👇`,
+            message: question,
             buttons: buttons
         };
     }
@@ -447,66 +455,30 @@ class OnboardingService {
         }
 
         const data = user.onboarding_data;
-        const expense = data.pending_expense;
+        const transaction = data.pending_transaction || data.pending_expense; // Compat
+        const type = transaction.type || 'expense';
 
         // Register Transaction
-        // FinanceService already imported at top level
-        // USE DETECTED CATEGORY AND TYPE
-        const transactionType = expense.type || 'expense'; // Default to expense if missing
-        const categoryName = expense.category || 'Otros';
+        const category = await FinanceService.categorizeTransaction(transaction.description);
 
         await FinanceService.createTransaction(
             user.phone_number,
-            transactionType,
-            expense.amount,
-            expense.description,
-            categoryName,
+            type,
+            transaction.amount,
+            transaction.description,
+            category,
             target.name
         );
 
-        // Move to Income Source (NEW STEP) instead of Goals
+        // Move to Goals
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_data: { step: 'income_source_input' }
-        });
-
-        // Detect account type for custom messaging
-        const isLiability = ['credit_card', 'loan', 'debt'].includes(target.type);
-        let transactionMsg = "";
-        const typeLabel = expense.typeLabel || (transactionType === 'income' ? 'Ingreso' : 'Gasto');
-
-        if (transactionType === 'income') {
-            transactionMsg = `✅ ${typeLabel} registrado y sumado a ${target.name}`;
-            if (isLiability) transactionMsg = `✅ ${typeLabel} registrado. Deuda en ${target.name} disminuida`;
-        } else {
-            // Expense
-            if (isLiability) {
-                transactionMsg = `🔴 Deuda aumentada en ${target.name} por ${formatCurrency(expense.amount)}`;
-            } else {
-                transactionMsg = `✅ Descontado de ${target.name}`;
-            }
-        }
-
-        return `¡Listo! ${warningMsg}${transactionMsg}.\n\n📂 **Categoría:** ${categoryName}\n\n💡 **Dato Curioso:**\nTus movimientos se organizan automáticamente. Así luego podrás preguntarme cosas como:\n_"¿Cuánto he gastado en transporte este mes?"_ ó _"¿En qué se me fue la plata la semana pasada?"_\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\nAntes de definir metas, necesito saber cómo "entra" el dinero.\n\n¿Cómo recibes tus ingresos? (Ej: "Salario fijo quincenal", "Freelance variable", "Negocio propio", "Mesada").`;
-    }
-
-    async handleIncomeSourceStep(user, message) {
-        // Save Income Source
-        await UserDBService.updateUser(user.phone_number, {
-            income_source_type: message, // Saving as raw text for now, could AI-classify later
-            onboarding_data: { step: 'challenges_input' }
-        });
-
-        return `Entendido. 📝\n\nSiguiente: para poder ayudarte, necesito saber qué te duele.\n\n¿Cuál es tu **mayor desafío financiero** hoy? (Ej: "Muchas deudas", "Gasto sin darme cuenta", "Quiero invertir pero no sé cómo").`;
-    }
-
-    async handleChallengesStep(user, message) {
-        // Save Main Challenge
-        await UserDBService.updateUser(user.phone_number, {
-            main_challenge: message,
             onboarding_data: { step: 'goals_input' }
         });
 
-        return `Vale, atacaremos eso. 🛡️\n\nAhora sí, las metas. ¿Para qué quieres organizar tu dinero?\n\nHablame de tus sueños (Ej: "Comprar moto", "Viajar con mi pareja", "Pagar la U").`;
+        const typeMsg = type === 'income' ? 'Ingreso' : 'Gasto';
+        const transactionMsg = `✅ ${typeMsg} registrado y categorizado a **${category}**`;
+
+        return `¡Listo! ${warningMsg}\n${transactionMsg}.\n\n💡 **Dato Curioso:**\nTus gastos e ingresos se organizan automáticamente.\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\n¿Para qué quieres organizar tu dinero?\n\nEjemplos:\n- "Quiero comprar una moto"\n- "Salir de deudas"\n- "Viajar a Europa"\n- "Tener paz mental"`;
     }
 
     async handleGoalsStep(user, message) {
@@ -518,7 +490,7 @@ class OnboardingService {
             }
         });
 
-        return `Anotado. 🎯\n\nÚltima pregunta vital 🧠:\n\nSi mañana tus inversiones caen un 20% por una crisis mundial..., que harías?\n\n(Dime qué harías sinceramente).`;
+        return `Anotado. 🎯\n\nÚltima pregunta vital (Psicología pura 🧠):\n\nSi mañana tus inversiones caen un 20% por una crisis mundial..., que harías?\n\nA) ¿Vendes todo en pánico para no perder más? 😱\nB) ¿Esperas tranquilo? 😐\nC) ¿Aprovechas y compras más barato? 🤑\n\n(Dime qué harías sinceramente).`;
     }
 
     async handleRiskProfileStep(user, message) {

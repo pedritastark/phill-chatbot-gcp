@@ -201,6 +201,44 @@ class AIService {
   }
 
   /**
+   * Analiza una transacción para determinar si es Gasto o Ingreso
+   * @param {string} text - Texto del usuario
+   * @returns {Promise<Object>} { type: 'income'|'expense', amount: number, description: string }
+   */
+  async analyzeTransaction(text) {
+    try {
+      const prompt = `
+      Analiza el texto y extrae la transacción financiera.
+      Texto: "${text}"
+
+      Clasifica:
+      - type: 'income' (Ganó dinero, recibió pago, salario, venta, encontró plata)
+      - type: 'expense' (Gastó, compró, pagó, le cobraron, perdió plata)
+      
+      Extrae monto (amount) y descripción corta.
+      
+      Output JSON:
+      { "type": "expense", "amount": 50000, "description": "Comida" }
+      `;
+
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: [
+          { role: "system", content: "Eres un clasificador de transacciones financieras." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      });
+
+      return JSON.parse(response.choices[0].message.content);
+    } catch (error) {
+      Logger.error('Error analizando transacción', error);
+      return { type: 'expense', amount: 0, description: text }; // Fallback safe
+    }
+  }
+
+  /**
    * Obtiene las definiciones de herramientas para OpenAI
    */
   getTools() {
