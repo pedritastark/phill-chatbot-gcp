@@ -70,6 +70,12 @@ class OnboardingService {
                 case 'expense_account':
                     return await this.handleExpenseAccountStep(user, cleanMessage);
 
+                case 'income_source_input': // NEW: Income Source
+                    return await this.handleIncomeSourceStep(user, cleanMessage);
+
+                case 'challenges_input': // NEW: Challenges
+                    return await this.handleChallengesStep(user, cleanMessage);
+
                 case 'goals_input': // NEW: Goals
                     return await this.handleGoalsStep(user, cleanMessage);
 
@@ -458,9 +464,9 @@ class OnboardingService {
             target.name
         );
 
-        // Move to Goals
+        // Move to Income Source (NEW STEP) instead of Goals
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_data: { step: 'goals_input' }
+            onboarding_data: { step: 'income_source_input' }
         });
 
         // Detect account type for custom messaging
@@ -480,7 +486,27 @@ class OnboardingService {
             }
         }
 
-        return `¡Listo! ${warningMsg}${transactionMsg}.\n\n📂 **Categoría:** ${categoryName}\n\n💡 **Dato Curioso:**\nTus movimientos se organizan automáticamente. Así luego podrás preguntarme cosas como:\n_"¿Cuánto he gastado en transporte este mes?"_ ó _"¿En qué se me fue la plata la semana pasada?"_\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\n¿Para qué quieres organizar tu dinero?\n\nEjemplos:\n- "Quiero comprar una moto"\n- "Salir de deudas"\n- "Viajar a Europa"\n- "Tener paz mental"`;
+        return `¡Listo! ${warningMsg}${transactionMsg}.\n\n📂 **Categoría:** ${categoryName}\n\n💡 **Dato Curioso:**\nTus movimientos se organizan automáticamente. Así luego podrás preguntarme cosas como:\n_"¿Cuánto he gastado en transporte este mes?"_ ó _"¿En qué se me fue la plata la semana pasada?"_\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\nAntes de definir metas, necesito saber cómo "entra" el dinero.\n\n¿Cómo recibes tus ingresos? (Ej: "Salario fijo quincenal", "Freelance variable", "Negocio propio", "Mesada").`;
+    }
+
+    async handleIncomeSourceStep(user, message) {
+        // Save Income Source
+        await UserDBService.updateUser(user.phone_number, {
+            income_source_type: message, // Saving as raw text for now, could AI-classify later
+            onboarding_data: { step: 'challenges_input' }
+        });
+
+        return `Entendido. 📝\n\nSiguiente: para poder ayudarte, necesito saber qué te duele.\n\n¿Cuál es tu **mayor desafío financiero** hoy? (Ej: "Muchas deudas", "Gasto sin darme cuenta", "Quiero invertir pero no sé cómo").`;
+    }
+
+    async handleChallengesStep(user, message) {
+        // Save Main Challenge
+        await UserDBService.updateUser(user.phone_number, {
+            main_challenge: message,
+            onboarding_data: { step: 'goals_input' }
+        });
+
+        return `Vale, atacaremos eso. 🛡️\n\nAhora sí, las metas. ¿Para qué quieres organizar tu dinero?\n\nHablame de tus sueños (Ej: "Comprar moto", "Viajar con mi pareja", "Pagar la U").`;
     }
 
     async handleGoalsStep(user, message) {
