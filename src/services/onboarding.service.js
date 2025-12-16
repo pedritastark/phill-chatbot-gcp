@@ -492,7 +492,7 @@ class OnboardingService {
             }
         });
 
-        return `Anotado. 🎯\n\nÚltima pregunta vital (Psicología pura 🧠):\n\nSi mañana tus inversiones caen un 20% por una crisis mundial..., que harías?\n\nA) ¿Vendes todo en pánico para no perder más? 😱\nB) ¿Esperas tranquilo? 😐\nC) ¿Aprovechas y compras más barato? 🤑\n\n(Dime qué harías sinceramente).`;
+        return `Anotado. 🎯\n\nÚltima pregunta vital 🧠:\n\nSi mañana tus inversiones caen un 20% por una crisis mundial..., que harías?\n\n(Dime qué harías sinceramente).`;
     }
 
     async handleRiskProfileStep(user, message) {
