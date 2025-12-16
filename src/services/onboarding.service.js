@@ -242,7 +242,7 @@ class OnboardingService {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💾\n\n**Tu Liquidez Total: ${formatCurrency(totalAssets)}**\n\n\nAhora vamos a la parte que a nadie le gusta, pero es necesaria para tener paz mental: **Las Deudas** 📉\n\n¿Tienes algún saldo pendiente? (Tarjetas, préstamos, o lo que le debes a un amigo).\n\nSi eres libre, escribe con orgullo "Cero".`;
+        return `¡Guardado! 💾\n\n**Tu Liquidez Total: ${formatCurrency(totalAssets)}**\n\n¿Tienes algún saldo pendiente? (Tarjetas, préstamos, o lo que le debes a un amigo). ["Cero" si no tienes deudas]`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -324,7 +324,7 @@ class OnboardingService {
         });
 
         return {
-            message: `Lista la primera parte. \n\n💰💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\n\nAhora, ** 2.EL HÁBITO** 🧠\n\n Usualmente la gente cree que gasta menos dinero que lo que gasta. Estas "fugas" te están afectando.\n\nVamos a hacer una prueba de lo que puedo hacer. ¿Listo para registrar tu primer movimiento?`,
+            message: `Lista la primera parte. \n\n💰💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\n\nAhora, ** 2.EL HÁBITO** 🧠\n\n Usualmente la gente cree que gasta o gana x dinero pero no lo sabe con exactitud.\n\nVamos a hacer una prueba de lo que puedo hacer. ¿Listo para registrar tu primer movimiento?`,
             buttons: [
                 { id: 'yes_start', title: 'Sí, ¡Vamos con eso! 🔥' },
                 { id: 'no_wait', title: 'Mmm... mejor no 🐢' }
