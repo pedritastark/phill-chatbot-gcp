@@ -17,7 +17,7 @@ class OnboardingService {
                 onboarding_data: { step: 'name_input' }
             });
 
-            return "¡Hola! 👋 Soy Phill, tu nuevo asistente financiero con IA.\n\nMi misión es simple: que dejes de estresarte por el dinero y empieces a hacerlo crecer. 🚀\n\nYo ya me presenté... ¿y tú eres? (Dime tu nombre o cómo te gusta que te llamen) 👇";
+            return "¡Hola! 👋 Soy Phill, tu nuevo **asistente financiero con IA**.\n\nMi misión es simple: que dejes de estresarte por el dinero y empieces a hacerlo crecer. 🚀\n\nYo ya me presenté... ¿y tú eres? (Dime tu nombre o cómo te gusta que te llamen) 👇";
         } catch (error) {
             Logger.error(`Error iniciando onboarding para ${userId}`, error);
             throw error;
@@ -108,7 +108,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a hacer crecer tu dinero, pongámonos serios un segundo. Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a hacer crecer tu dinero, pongámonos serios un segundo. **Tu privacidad es sagrada para mí**.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
             buttons: [{ id: 'accept', title: 'Acepto' }, { id: 'terms', title: 'Leer Términos' }]
         };
     }
