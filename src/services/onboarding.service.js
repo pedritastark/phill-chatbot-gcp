@@ -17,7 +17,7 @@ class OnboardingService {
                 onboarding_data: { step: 'name_input' }
             });
 
-            return "¡Hola! 👋 Soy Phill, tu nuevo asistente financiero con IA.\n\nMi misión es simple: que dejes de estresarte por el dinero y empieces a hacerlo crecer. 🚀\n\nYo ya me presenté... ¿y tú eres? (Dime tu nombre o cómo te gusta que te llamen) 👇";
+            return "¡Hola! 🎩 Soy Phill, tu asistente financiero con IA.\n\nMi misión es simple: que dejes de estresarte por el dinero y empieces a hacerlo crecer 🏆\n\nYo ya me presenté… ahora dime tú\n¿Cómo te gusta que te llame?";
         } catch (error) {
             Logger.error(`Error iniciando onboarding para ${userId}`, error);
             throw error;
@@ -92,10 +92,7 @@ class OnboardingService {
     // --- STEP HANDLERS ---
 
     async handleNameStep(user, message) {
-        // ... (Logic stays similar, reusing name extraction) ...
-        // Simplified for brevity in this replace block, essentially same logic
         let name = message;
-        // Basic extraction logic
         const prefixes = ['me llamo', 'mi nombre es', 'soy', 'dime'];
         const lower = message.toLowerCase();
         for (const p of prefixes) {
@@ -108,8 +105,8 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a hacer crecer tu dinero, pongámonos serios un segundo. Tu privacidad es sagrada para mí.\n\nNecesito que me des luz verde para tratar tus datos de forma segura. ¿Aceptas los términos y condiciones? 🔒`,
-            buttons: [{ id: 'accept', title: 'Acepto' }, { id: 'terms', title: 'Leer Términos' }]
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a mover números, una cosa importante:\ntu privacidad es sagrada para mí.\n\nRecuerda:\n1️⃣ Tus datos son tuyos. No los vendemos.\n2️⃣ La IA solo usa tu información para ayudarte mejor.\n3️⃣ Puedes borrar todo cuando quieras escribiendo /reset.\n4️⃣ No somos un banco ni damos asesoría legal. Somos una herramienta educativa.\n\nPara ayudarte bien necesito tu permiso para tratar tus datos de forma segura.\n¿Aceptas los términos y condiciones? 🟣`,
+            buttons: [{ id: 'accept', title: '⚜️ Acepto' }, { id: 'terms', title: '🌂 Leer términos' }]
         };
     }
 
@@ -117,28 +114,25 @@ class OnboardingService {
     async handleTermsAcceptanceStep(user, message) {
         const action = message.toLowerCase();
 
-
         if (action.includes('leer') || action.includes('terms')) {
             return {
-                message: "📜 **Términos y Condiciones**\n\n1. Tus datos son tuyos. No los vendemos.\n2. El modelo de IA que usamos, solo usa tus datos solo para darte una mejor comprensión de lo que necesitas.\n3. Puedes borrar toda tu información escribiendo /reset.\n4. No somos un banco, somos una herramienta educativa.\n\n¿Aceptas para continuar? 💜",
+                message: "🌂 **Términos y Condiciones**\n\n1️⃣ Tus datos son tuyos. No los vendemos.\n2️⃣ La IA solo usa tu información para ayudarte mejor.\n3️⃣ Puedes borrar todo cuando quieras escribiendo /reset.\n4️⃣ No somos un banco ni damos asesoría legal. Somos una herramienta educativa.\n\n¿Aceptas para continuar? 💜",
                 buttons: [
-                    { id: 'accept', title: 'Acepto (Ahora sí)' }
+                    { id: 'accept', title: '⚜️ Acepto' }
                 ]
             };
         } else {
-            // Default: Accept
             return await this.handleDataAcceptanceStep(user, message);
         }
     }
 
     async handleDataAcceptanceStep(user, message) {
-        // ... (Logic stays similar)
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: { step: 'initial_balances' }
         });
 
         return {
-            message: `¡Trato hecho! 🤝💜\n\nVamos a armar tu mapa financiero.\n\nPara ayudarte a crecer, primero necesito saber tu **Punto de Partida**. No necesito centavos exactos, con aproximados basta.\n\n¿Dónde tienes tu dinero hoy? (Ej: "300k en Nequi, 2M en Bancolombia y 50k en la billetera").`
+            message: `🏆 ¡PERFECTO! Para ayudarte a crecer, primero necesito saber tu Punto de Partida.\n\nVamos a registrar tu dinero disponible. Puedes responder a preguntas como:\n¿Dónde tienes tu dinero? ¿Cuánto tienes en cada cuenta?\n\nNo necesito centavos exactos, con aproximados basta.\n\nRecuerda que usamos moneda Colombiana COP como predeterminada, así que si tienes dinero extranjero se registrará en una cuenta con su nombre (ej: "Dólares").\n\nEjemplo:\n'300k en Nequi, 2M en Bancolombia, 50 mil en efectivo, 800.000 en un zapato y 25 Dólares'`
         };
     }
 
@@ -206,7 +200,7 @@ class OnboardingService {
 
     async handleConfirmAssetsStep(user, message) {
         const data = user.onboarding_data;
-        const action = message.toLowerCase(); // Check button ID or text
+        const action = message.toLowerCase();
 
         if (action.includes('modificar') || action.includes('retry')) {
             await UserDBService.updateUser(user.phone_number, {
@@ -215,10 +209,8 @@ class OnboardingService {
             return "Entendido. Escríbelo de nuevo por favor (Ej: 'Nequi 200k, Efectivo 50k'):";
         }
 
-        // Accept
         const accounts = data.temp_assets || [];
 
-        // Clean previous accounts (safety)
         const existing = await AccountDBService.findByUser(user.user_id);
         for (const acc of existing) await AccountDBService.delete(acc.account_id);
 
@@ -232,17 +224,17 @@ class OnboardingService {
                 type: acc.type || 'savings',
                 balance: acc.balance,
                 isDefault: acc.type === 'cash',
-                icon: acc.type === 'cash' ? '💵' : '🏦'
+                icon: acc.type === 'cash' ? '🟪' : '🟣'
             });
             totalAssets += acc.balance;
-            summaryText += `${acc.type === 'cash' ? '💵' : '🏦'} ${acc.name}: ${formatCurrency(acc.balance)}\n`;
+            summaryText += `${acc.type === 'cash' ? '🟪' : '🟣'} ${acc.name}: ${formatCurrency(acc.balance)}\n`;
         }
 
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💾\n\n**Tu Liquidez Total: ${formatCurrency(totalAssets)}**\n\n\nAhora vamos a la parte que a nadie le gusta, pero es necesaria para tener paz mental: **Las Deudas** 📉\n\n¿Tienes algún saldo pendiente? (Tarjetas, préstamos, o lo que le debes a un amigo).\n\nSi eres libre, escribe con orgullo "Cero".`;
+        return `¡Guardado! 💜\n\n🏆 Tu liquidez total: ${formatCurrency(totalAssets)}\n\nAhora vamos a lo incómodo… pero liberador 🌂\nLas deudas\n\n¿Tienes algún saldo pendiente?\n(Tarjetas, préstamos, amigos…)\n\nEjemplo:\n🟣 Tarjeta Crédito: $1.200.000\n🟣 Préstamo: $800.000\n\nSi no tienes, escribe: Cero.`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -250,21 +242,20 @@ class OnboardingService {
         let tempLiabilities = [];
         let summary = "";
 
-        // Check for "no debts"
         const clean = message.toLowerCase();
         if (clean.includes('cero') || clean.includes('nada') || clean.includes('no debo') || clean.includes('libre')) {
-            summary = "🎉 ¡Libre de deudas! (Cero pasivos)";
+            summary = "🏆 ¡Libre de deudas! (Cero pasivos)";
         } else {
             const extracted = await AIService.extractLiabilities(message);
             tempLiabilities = extracted.liabilities || [];
 
             if (tempLiabilities.length === 0) {
-                return "No entendí tus deudas. 🧐 Escribe 'Debo X en Y' o 'Cero' si no tienes.";
+                return "No entendí tus deudas. 🎩 Escribe 'Debo X en Y' o 'Cero' si no tienes.";
             }
 
             summary = "Confirma tus DEUDAS:\n\n";
             for (const debt of tempLiabilities) {
-                summary += `🔴 ${debt.name}: ${formatCurrency(debt.amount)}\n`;
+                summary += `🟣 ${debt.name}: ${formatCurrency(debt.amount)}\n`;
             }
         }
 
@@ -278,10 +269,10 @@ class OnboardingService {
         });
 
         return {
-            message: summary,
+            message: summary + "\n\n¿Está bien o deseas modificarlo?",
             buttons: [
-                { id: 'accept', title: '✅ Perfecto' },
-                { id: 'retry', title: '✏️ Corregir' }
+                { id: 'accept', title: '⚜️ Perfecto' },
+                { id: 'retry', title: '☂️ Corregir' }
             ]
         };
     }
@@ -292,12 +283,11 @@ class OnboardingService {
 
         if (action.includes('corregir') || action.includes('retry')) {
             await UserDBService.updateUser(user.phone_number, {
-                onboarding_data: { step: 'initial_liabilities' }
+                onboarding_data: { ...data, step: 'initial_liabilities' }
             });
             return "Ok, cuéntame de nuevo qué deudas tienes (o 'Cero'):";
         }
 
-        // Create Liabilities
         const debts = data.temp_liabilities || [];
         let totalLiabilities = 0;
 
@@ -307,29 +297,23 @@ class OnboardingService {
                 name: debt.name,
                 type: debt.type || 'debt',
                 balance: debt.amount,
-                icon: '📉',
-                color: '#ef4444'
+                icon: '🟣',
+                color: '#8b5cf6'
             });
             totalLiabilities += debt.amount;
         }
 
         const assets = data.total_assets || 0;
-        const netWorth = assets - totalLiabilities;
 
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: {
-                step: 'tutorial_explanation',
-                net_worth: netWorth
+                ...data,
+                step: 'goals_input',
+                total_liabilities: totalLiabilities
             }
         });
 
-        return {
-            message: `Lista la primera parte. \n\n💰💰 **Tu Dinero:** ${formatCurrency(assets)}\n📉 **Lo que debes:** ${formatCurrency(totalLiabilities)}\n\n\nAhora, ** 2.EL HÁBITO** 🧠\n\n Usualmente la gente cree que gasta menos dinero que lo que gasta. Estas "fugas" te están afectando.\n\nVamos a hacer una prueba de lo que puedo hacer. ¿Listo para registrar tu primer movimiento?`,
-            buttons: [
-                { id: 'yes_start', title: 'Sí, ¡Vamos con eso! 🔥' },
-                { id: 'no_wait', title: 'Mmm... mejor no 🐢' }
-            ]
-        };
+        return `Listo el diagnóstico base 🎩\n\n🏆 Tus activos: ${formatCurrency(assets)}\n🟣 Tus deudas: ${formatCurrency(totalLiabilities)}\n\nAntes de seguir, déjame contarte algo importante 💜\n\nUna de mis funciones favoritas es que me convierto en tu memoria financiera 🌂\n\nPuedo recordarte cosas como:\n• Pagar el gas o el agua cierto día del mes\n• La cuota de una deuda\n• Un cobro que tienes pendiente\n• Cualquier pago recurrente que no quieras olvidar\n\nTú solo me dices qué, cuándo y cada cuánto, y yo me encargo del resto 🟪💜\n\nSi ahora no lo tienes claro, tranquilo: puedes crear recordatorios en cualquier momento escribiendo la palabra "recordatorio".\n\n---\n\nPerfecto 🏆\nTener claro para qué ordenas tu dinero cambia todo.\n\nCuéntame en una frase:\n¿Qué quieres lograr con tu dinero en los próximos meses o años?\n\nEjemplos:\n• 'Salir de deudas'\n• 'Comprar una moto'\n• 'Viajar'\n• 'Tener tranquilidad'`;
     }
 
     async handleTutorialExplanationStep(user, message) {
@@ -482,47 +466,49 @@ class OnboardingService {
     }
 
     async handleGoalsStep(user, message) {
-        // Store Goal text temporarily
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: {
+                ...user.onboarding_data,
                 step: 'risk_profile_input',
                 goal_text: message
             }
         });
 
-        return `Anotado. 🎯\n\nÚltima pregunta vital (Psicología pura 🧠):\n\nSi mañana tus inversiones caen un 20% por una crisis mundial..., que harías?\n\nA) ¿Vendes todo en pánico para no perder más? 😱\nB) ¿Esperas tranquilo? 😐\nC) ¿Aprovechas y compras más barato? 🤑\n\n(Dime qué harías sinceramente).`;
+        return `Gracias por contármelo 💜\n\nAhora quiero conocerte un poco mejor, no para juzgarte, sino para ayudarte de la forma correcta.\n\nCada persona vive el dinero distinto, y eso está bien.\n\nCuando se trata de dinero, tú eres más de…\n\nA) Prefiero ir a lo seguro, aunque gane menos 🌂\nB) Me gusta equilibrar seguridad y oportunidad ⚖️\nC) Me siento cómodo tomando riesgos si hay potencial 🏆\n\nNo hay respuestas buenas o malas.\nSolo dime con cuál te identificas más.`;
     }
 
     async handleRiskProfileStep(user, message) {
-        const AIService = require('./ai.service');
         const data = user.onboarding_data;
+        const clean = message.toLowerCase().trim();
 
-        // Analyze Profile
-        const analysis = await AIService.analyzeFinancialProfile(data.goal_text, message);
+        let profileType = 'balanced';
+        let profileResponse = '';
 
-        // Save to DB
-        await UserDBService.updateProfile(user.user_id, {
-            primaryGoal: data.goal_text, // or mapped enum
-            riskTolerance: analysis.risk_profile,
-            // Custom fields need to be handled in UserDBService or just generalized
-            // For now, we update specific columns via generic update if supported 
-        });
+        if (clean.includes('a') || clean.includes('seguro') || clean.includes('conservador')) {
+            profileType = 'conservative';
+            profileResponse = `🟣 Perfil Conservador\n\nPerfecto 🎩\nVeo que valoras la tranquilidad y la estabilidad.\nEso significa que conmigo voy a:\n• Priorizar orden y control\n• Evitar decisiones impulsivas\n• Explicarte todo paso a paso\n\nGanarás paz mental antes que emociones fuertes 🌂`;
+        } else if (clean.includes('c') || clean.includes('riesgo') || clean.includes('dinamico') || clean.includes('dinámico')) {
+            profileType = 'dynamic';
+            profileResponse = `🏆 Perfil Dinámico\n\nEntendido 🎩\nTe sientes cómodo con el riesgo si hay visión.\nYo contigo voy a:\n• Ayudarte a medir mejor las decisiones\n• Recordarte no perder el control\n• Pensar en crecimiento, no solo en ahorro\n\nLa clave será la estrategia 💜`;
+        } else {
+            profileType = 'balanced';
+            profileResponse = `⚜️ Perfil Balanceado\n\nBuenísimo 🎩\nTe mueves bien entre cuidar tu dinero y hacerlo crecer.\nCon este perfil voy a:\n• Buscar oportunidades sin desorden\n• Ayudarte a planear antes de decidir\n• Mantener un equilibrio sano\n\nEs un perfil muy completo 🏆`;
+        }
 
-        // Specific columns added in migration
+        const assets = data.total_assets || 0;
+        const liabilities = data.total_liabilities || 0;
+        const goal = data.goal_text || 'No especificada';
+
         await UserDBService.updateUser(user.phone_number, {
-            financial_goal_level: analysis.goal_level,
-            financial_diagnosis: analysis.triage_text,
-            onboarding_data: { step: 'diagnosis_display' }
+            financial_goal_level: goal,
+            financial_diagnosis: profileType,
+            onboarding_data: { ...data, step: 'diagnosis_display', risk_profile: profileType }
         });
 
-        return `🔍 **DIAGNÓSTICO FINAL DE PHILL**\n\n${analysis.triage_text}\n\nVeo que tienes una meta clara y tu perfil de riesgo influye en cómo lograrla.\n\nHe configurado tu plan. 🏁\n\n¿Qué te pareció este inicio? (Califícame para mejorar)`;
+        return `${profileResponse}\n\n---\n\n🎩 DIAGNÓSTICO INICIAL DE PHILL\n\n• Punto de partida: ${formatCurrency(assets)} en activos, ${formatCurrency(liabilities)} en deudas\n• Meta principal: ${goal}\n• Estilo financiero: ${profileType === 'conservative' ? 'Conservador' : profileType === 'dynamic' ? 'Dinámico' : 'Balanceado'}\n\nCon esto ya puedo ayudarte de verdad.\n\nA partir de ahora:\n• Registraré tus movimientos\n• Te daré recordatorios\n• Te explicaré conceptos financieros que necesites\n\nRecuerda: No voy a darte consejos genéricos.\nVoy a ayudarte a tu ritmo y según lo que tú buscas.\n\n¿Cómo te sentiste con este inicio?\nTu feedback me ayuda a mejorar 💜`;
     }
 
     async handleDiagnosisRatingStep(user, message) {
-        // Extract rating if possible, or just buttons
-        // Assuming buttons sent 1-5 or user typed
-
-        // Set Reminder
         const now = new Date();
         const scheduledTime = new Date(now);
         scheduledTime.setHours(20, 0, 0, 0);
@@ -530,7 +516,7 @@ class OnboardingService {
 
         await ReminderDBService.createReminder({
             userId: user.user_id,
-            message: "Cierre diario 🌙. ¿Qué gastos hiciste hoy?",
+            message: "Cierre diario 🌂. ¿Qué gastos hiciste hoy?",
             scheduledAt: scheduledTime,
             isRecurring: true,
             recurrencePattern: 'daily'
@@ -539,10 +525,10 @@ class OnboardingService {
         await UserDBService.updateUser(user.phone_number, {
             onboarding_completed: true,
             onboarding_data: { step: 'completed' },
-            onboarding_rating: 5 // Default or parsed
+            onboarding_rating: 5
         });
 
-        return `¡Gracias! ⭐⭐⭐⭐⭐\n\nTu transformación financiera empieza hoy.\n\n🔔 **Mi compromiso:** Te escribiré cada noche a las 8 PM para cerrar el día (puedes cambiar la hora después escribiendo /config).\n\n¡A romperla! 🔥💜`;
+        return `¡Gracias! 🏆🏆🏆🏆🏆\n\nTu transformación financiera empieza hoy.\n\n🌂 Mi compromiso: Te escribiré cada noche a las 8 PM para cerrar el día (puedes cambiar la hora después escribiendo /config).\n\nSi quieres utilizar esta herramienta al máximo, puedes echarle un vistazo a la página web donde hay ejemplos de cómo puedo ayudarte en tu día a día a construir el futuro que buscas.\n\n¡A romperla! 🎩💜`;
     }
 
     parseAmount(text) {
