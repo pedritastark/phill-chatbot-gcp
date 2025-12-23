@@ -58,6 +58,12 @@ class OnboardingService {
                 case 'confirm_liabilities': // NEW: Confirm Liabilities
                     return await this.handleConfirmLiabilitiesStep(user, cleanMessage);
 
+                case 'reminder_intro': // NEW: Reminder Intro
+                    return await this.handleReminderIntroStep(user, cleanMessage);
+
+                case 'reminder_creation_onboarding': // NEW: Create Reminder
+                    return await this.handleReminderCreationOnboardingStep(user, cleanMessage);
+
                 case 'tutorial_explanation': // NEW: Bridge step
                     return await this.handleTutorialExplanationStep(user, cleanMessage);
 
@@ -105,7 +111,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a mover números, una cosa importante:\ntu privacidad es sagrada para mí.\n\nRecuerda:\n1️⃣ Tus datos son tuyos. No los vendemos.\n2️⃣ La IA solo usa tu información para ayudarte mejor.\n3️⃣ Puedes borrar todo cuando quieras escribiendo /reset.\n4️⃣ No somos un banco ni damos asesoría legal. Somos una herramienta educativa.\n\nPara ayudarte bien necesito tu permiso para tratar tus datos de forma segura.\n¿Aceptas los términos y condiciones? 🟣`,
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a mover números, una cosa importante:\ntu privacidad es sagrada para mí.\n\nRecuerda:\n1️⃣ Respetamos la privacidad de tus datos.\n2️⃣ La IA solo usa tu información para ayudarte.\n3️⃣ No damos asesoría financiera (ejemplo: invierte todo tu capital en criptomonedas). Somos una herramienta educativa.\n\nPara ayudarte bien necesito tu permiso para tratar tus datos de forma segura.\n¿Aceptas los términos y condiciones? 🟣`,
             buttons: [{ id: 'accept', title: '⚜️ Acepto' }, { id: 'terms', title: '🌂 Leer términos' }]
         };
     }
@@ -116,7 +122,7 @@ class OnboardingService {
 
         if (action.includes('leer') || action.includes('terms')) {
             return {
-                message: "🌂 **Términos y Condiciones**\n\n1️⃣ Tus datos son tuyos. No los vendemos.\n2️⃣ La IA solo usa tu información para ayudarte mejor.\n3️⃣ Puedes borrar todo cuando quieras escribiendo /reset.\n4️⃣ No somos un banco ni damos asesoría legal. Somos una herramienta educativa.\n\n¿Aceptas para continuar? 💜",
+                message: "🌂 **Términos y Condiciones:** www.phillfinance.com/tyc \n\n¿Aceptas para continuar? 💜",
                 buttons: [
                     { id: 'accept', title: '⚜️ Acepto' }
                 ]
@@ -132,7 +138,7 @@ class OnboardingService {
         });
 
         return {
-            message: `🏆 ¡PERFECTO! Para ayudarte a crecer, primero necesito saber tu Punto de Partida.\n\nVamos a registrar tu dinero disponible. Puedes responder a preguntas como:\n¿Dónde tienes tu dinero? ¿Cuánto tienes en cada cuenta?\n\nNo necesito centavos exactos, con aproximados basta.\n\nRecuerda que usamos moneda Colombiana COP como predeterminada, así que si tienes dinero extranjero se registrará en una cuenta con su nombre (ej: "Dólares").\n\nEjemplo:\n'300k en Nequi, 2M en Bancolombia, 50 mil en efectivo, 800.000 en un zapato y 25 Dólares'`
+            message: `¡Excelente! 🏆 Estás a un paso de tomar el control.\n\nPara ayudarte de verdad, necesito saber con qué herramientas contamos. Aquí no hay juicios, solo estrategia para crecer.\n\nCuéntame, ¿cuánto tienes hoy y en qué lugares (cuentas o efectivo) está?\n\nEjemplo:\n'300k en Nequi, 2M en Bancolombia, 50 mil en efectivo, 800.000 debajo del colchón y 25 Dólares'`
         };
     }
 
@@ -206,7 +212,7 @@ class OnboardingService {
             await UserDBService.updateUser(user.phone_number, {
                 onboarding_data: { step: 'initial_balances' }
             });
-            return "Entendido. Escríbelo de nuevo por favor (Ej: 'Nequi 200k, Efectivo 50k'):";
+            return "Entendido. Escríbelo todo de nuevo por favor \n '300k en Nequi, 2M en Bancolombia, 50 mil en efectivo, 800.000 en un zapato y 25 Dólares'";
         }
 
         const accounts = data.temp_assets || [];
@@ -234,7 +240,7 @@ class OnboardingService {
             onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
         });
 
-        return `¡Guardado! 💜\n\n🏆 Tu liquidez total: ${formatCurrency(totalAssets)}\n\nAhora vamos a lo incómodo… pero liberador 🌂\nLas deudas\n\n¿Tienes algún saldo pendiente?\n(Tarjetas, préstamos, amigos…)\n\nEjemplo:\n🟣 Tarjeta Crédito: $1.200.000\n🟣 Préstamo: $800.000\n\nSi no tienes, escribe: Cero.`;
+        return `¡Listo! Tienes ${formatCurrency(totalAssets)} a tu favor. 🏆\n\nAhora vamos por tu tranquilidad financiera. No veas las deudas como un problema, sino como algo que vamos a gestionar juntos. ¿Qué compromisos o saldos tienes pendientes por pagar hoy?\n\nNota: recuerda aclarar el cupo de la tarjeta de credito y cuanto has gastado\n\nEjemplo: " Debo 1M a mi tía y 200.000 de un credito, ademas tengo una tarje de credito con cupo de 2M y gastado 500 mil"\n\nSi no tienes, escribe: Cero.`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -308,12 +314,51 @@ class OnboardingService {
         await UserDBService.updateUser(user.phone_number, {
             onboarding_data: {
                 ...data,
-                step: 'goals_input',
+                step: 'reminder_intro',
                 total_liabilities: totalLiabilities
             }
         });
 
-        return `Listo el diagnóstico base 🎩\n\n🏆 Tus activos: ${formatCurrency(assets)}\n🟣 Tus deudas: ${formatCurrency(totalLiabilities)}\n\nAntes de seguir, déjame contarte algo importante 💜\n\nUna de mis funciones favoritas es que me convierto en tu memoria financiera 🌂\n\nPuedo recordarte cosas como:\n• Pagar el gas o el agua cierto día del mes\n• La cuota de una deuda\n• Un cobro que tienes pendiente\n• Cualquier pago recurrente que no quieras olvidar\n\nTú solo me dices qué, cuándo y cada cuánto, y yo me encargo del resto 🟪💜\n\nSi ahora no lo tienes claro, tranquilo: puedes crear recordatorios en cualquier momento escribiendo la palabra "recordatorio".\n\n---\n\nPerfecto 🏆\nTener claro para qué ordenas tu dinero cambia todo.\n\nCuéntame en una frase:\n¿Qué quieres lograr con tu dinero en los próximos meses o años?\n\nEjemplos:\n• 'Salir de deudas'\n• 'Comprar una moto'\n• 'Viajar'\n• 'Tener tranquilidad'`;
+        return `Listo el diagnóstico base 🎩\n\n🏆 Tu dinero: ${formatCurrency(assets)}\n🟣 Tus deudas: ${formatCurrency(totalLiabilities)}\n\nAntes de seguir, déjame contarte algo importante 💜\n\nUna de mis funciones favoritas es que me convierto en tu memoria financiera 🌂\n\nPuedo recordarte cosas como:\n• Pagar el gas o el agua cierto día del mes\n• La cuota de una deuda\n• Un cobro que tienes pendiente\n• Cualquier pago recurrente que no quieras olvidar\n\nTú solo me dices qué, cuándo y cada cuánto, y yo me encargo del resto 🟪💜\n\n¿Quieres crear un recordatorio ahora mismo o prefieres continuar?\n(Responde "Agendar" o "Continuar")`;
+    }
+
+    async handleReminderIntroStep(user, message) {
+        const action = message.toLowerCase();
+
+        if (action.includes('agendar') || action.includes('si') || action.includes('ok')) {
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: { ...user.onboarding_data, step: 'reminder_creation_onboarding' }
+            });
+            return "¡De una! 🎩\n\nDime qué quieres recordar, cuándo y si se repite.\n\nEjemplo: 'Recordar pagar el agua mañana a las 8 am'";
+        }
+
+        // Default: Continue to goals
+        await UserDBService.updateUser(user.phone_number, {
+            onboarding_data: { ...user.onboarding_data, step: 'goals_input' }
+        });
+
+        return `¡Perfecto! 🏆 Ya tenemos la base clara.\n\nAhora, para ser el mejor equipo, necesito saber qué es lo que realmente te mueve.\nCuéntame con confianza:\n\n**¿Qué quieres lograr o cambiar en tu vida financiera próximamente?**\n\nEjemplos:\n• 'Salir de deudas'\n• 'Comprar una moto'\n• 'Viajar'\n• 'Tener tranquilidad'`;
+    }
+
+    async handleReminderCreationOnboardingStep(user, message) {
+        const AIService = require('./ai.service');
+        const reminderData = await AIService.extractReminder(message);
+
+        if (reminderData) {
+            await ReminderDBService.createReminder({
+                userId: user.user_id,
+                message: reminderData.message,
+                scheduledAt: new Date(reminderData.datetime),
+                isRecurring: reminderData.is_recurring,
+                recurrencePattern: reminderData.recurrence_pattern
+            });
+        }
+
+        await UserDBService.updateUser(user.phone_number, {
+            onboarding_data: { ...user.onboarding_data, step: 'goals_input' }
+        });
+
+        return `¡Anotado! 📝 Te avisaré a tiempo.\n\n---\n\n¡Perfecto! 🏆 Ya tenemos la base clara.\n\nAhora, para ser el mejor equipo, necesito saber qué es lo que realmente te mueve.\nCuéntame con confianza:\n\n**¿Qué quieres lograr o cambiar en tu vida financiera próximamente?**\n\nEjemplos:\n• 'Salir de deudas'\n• 'Comprar una moto'\n• 'Viajar'\n• 'Tener tranquilidad'`;
     }
 
     async handleTutorialExplanationStep(user, message) {

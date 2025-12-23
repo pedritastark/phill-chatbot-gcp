@@ -334,8 +334,17 @@ class MessageService {
 
       // Respuesta de confirmación
       const dateObj = new Date(args.datetime);
-      const dateStr = dateObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
-      const timeStr = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = dateObj.toLocaleDateString('es-CO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        timeZone: 'America/Bogota'
+      });
+      const timeStr = dateObj.toLocaleTimeString('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Bogota'
+      });
 
       let confirmation = `✅ ¡Hecho! Te recordaré "${args.message}" el ${dateStr} a las ${timeStr}`;
 

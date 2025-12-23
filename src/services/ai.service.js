@@ -239,6 +239,44 @@ class AIService {
   }
 
   /**
+   * Extrae la intención de recordatorio del usuario
+   * @param {string} message - Mensaje del usuario
+   * @returns {Promise<Object>}
+   */
+  async extractReminder(message) {
+    try {
+      const prompt = `
+          El usuario quiere configurar un recordatorio.
+          Mensaje: "${message}"
+          
+          Extrae:
+          - message: Qué se debe recordar (corto y claro).
+          - datetime: Fecha y hora exacta ISO (YYYY-MM-DDTHH:mm:ss). Asume año actual y zona horaria Colombia (-5). Si no dice hora, usa 8:00 AM.
+          - is_recurring: true/false.
+          - recurrence_pattern: 'daily', 'weekly', 'monthly', 'yearly' o null.
+
+          Output JSON:
+          { "message": "Pagar internet", "datetime": "2023-10-20T08:00:00", "is_recurring": false, "recurrence_pattern": null }
+          `;
+
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: [
+          { role: "system", content: "Eres un asistente de calendario." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      });
+
+      return JSON.parse(response.choices[0].message.content);
+    } catch (error) {
+      Logger.error('Error extrayendo recordatorio', error);
+      return null;
+    }
+  }
+
+  /**
    * Obtiene las definiciones de herramientas para OpenAI
    */
   getTools() {

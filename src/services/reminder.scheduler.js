@@ -27,9 +27,12 @@ class ReminderScheduler {
             await this.checkReminders();
         });
 
-        // Tip Semanal (Miércoles 8 PM)
-        cron.schedule('0 20 * * 3', async () => {
-            await this.sendWeeklyTip();
+        // Tip Diario (8 PM hora Colombia)
+        cron.schedule('0 20 * * *', async () => {
+            await this.sendDailyTip();
+        }, {
+            scheduled: true,
+            timezone: "America/Bogota"
         });
 
         this.isRunning = true;
@@ -113,14 +116,25 @@ class ReminderScheduler {
     }
 
     /**
-     * Envía el tip semanal a todos los usuarios
+     * Envía el tip diario a todos los usuarios
      */
-    async sendWeeklyTip() {
+    async sendDailyTip() {
         try {
-            Logger.info('📢 Iniciando envío de Tip Semanal...');
+            Logger.info('📢 Iniciando envío de Tip Diario...');
             const users = await UserDBService.getAllUsers(1000); // Límite alto para MVP
 
-            const tipMessage = `¡Feliz miércoles! Mitad de semana. 🔥\n\n💡 *Phill Hack*: Si estás en el metro o en una cena y quieres registrar un gasto sin que nadie vea tu saldo en la pantalla, activa el Modo Ninja.\n\nSolo escribe: 'Discreto' o manda un emoji de ninja 🥷 y yo me encargo del resto. ¡Pruébalo! 😉 💜`;
+            // TODO: Hacer esto dinámico con IA o una lista de tips
+            const tips = [
+                "💡 *Phill Hack*: Si estás en el metro o en una cena y quieres registrar un gasto sin que nadie vea tu saldo en la pantalla, activa el Modo Ninja. Solo escribe: 'Discreto' o manda un emoji de ninja 🥷.",
+                "💡 *Phill Tip*: Revisar tus gastos diarios toma menos de 1 minuto y te ahorra dolores de cabeza a fin de mes.",
+                "💡 *Sabías que...* Pequeños gastos hormiga pueden sumar hasta el 15% de tu sueldo. ¡Ojo con el café de todos los dias! ☕",
+                "💡 *Reto Phill*: Intenta pasar el día de mañana sin gastos innecesarios. ¿Te atreves? 🚫💸",
+                "💡 *Inversión*: No necesitas ser millonario para invertir. Empezar con poco es mejor que no empezar."
+            ];
+
+            // Seleccionar tip aleatorio
+            const randomTip = tips[Math.floor(Math.random() * tips.length)];
+            const tipMessage = `¡Hola! Tu dosis diaria de sabiduría financiera. 🧠\n\n${randomTip}\n\n💜`;
 
             let count = 0;
             for (const user of users) {
@@ -137,9 +151,9 @@ class ReminderScheduler {
                     Logger.error(`Error enviando tip a ${user.phone_number}`, err);
                 }
             }
-            Logger.success(`✅ Tip semanal enviado a ${count} usuarios.`);
+            Logger.success(`✅ Tip diario enviado a ${count} usuarios.`);
         } catch (error) {
-            Logger.error('Error general enviando tip semanal', error);
+            Logger.error('Error general enviando tip diario', error);
         }
     }
 }
