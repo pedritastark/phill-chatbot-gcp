@@ -128,8 +128,9 @@ class AccountDBService {
           color,
           icon,
           is_default,
-          category
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          category,
+          currency
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *`,
         [
           userId,
@@ -143,7 +144,8 @@ class AccountDBService {
           color || '#6366f1',
           icon || 'bank',
           isDefault || false,
-          accountData.category || 'LIQUIDEZ'
+          accountData.category || 'LIQUIDEZ',
+          accountData.currency || 'COP'
         ]
       );
 
@@ -338,6 +340,60 @@ class AccountDBService {
       return result.rows;
     } catch (error) {
       Logger.error('Error al obtener cuentas con estadísticas', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene los detalles de una tarjeta de crédito (cupo, usado, disponible)
+   * @param {string} accountId - UUID de la cuenta
+   * @returns {Promise<{available: number, limit: number, used: number}|null>}
+   */
+  async getCreditCardDetails(accountId) {
+    try {
+      const account = await this.findById(accountId);
+      if (!account || account.type !== 'credit_card') {
+        return null;
+      }
+
+      const limit = parseFloat(account.credit_limit) || 0;
+      const used = parseFloat(account.balance) || 0;
+      const available = limit - used;
+
+      return {
+        available,
+        limit,
+        used,
+        name: account.name
+      };
+    } catch (error) {
+      Logger.error('Error al obtener detalles de tarjeta de crédito', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene todas las tarjetas de crédito de un usuario con sus detalles
+   * @param {string} userId - UUID del usuario
+   * @returns {Promise<Array<{available: number, limit: number, used: number, name: string}>>}
+   */
+  async getCreditCardsByUser(userId) {
+    try {
+      const result = await query(
+        `SELECT * FROM accounts 
+         WHERE user_id = $1 AND type = 'credit_card' AND is_active = true`,
+        [userId]
+      );
+
+      return result.rows.map(account => ({
+        account_id: account.account_id,
+        name: account.name,
+        limit: parseFloat(account.credit_limit) || 0,
+        used: parseFloat(account.balance) || 0,
+        available: (parseFloat(account.credit_limit) || 0) - (parseFloat(account.balance) || 0)
+      }));
+    } catch (error) {
+      Logger.error('Error al obtener tarjetas de crédito del usuario', error);
       throw error;
     }
   }

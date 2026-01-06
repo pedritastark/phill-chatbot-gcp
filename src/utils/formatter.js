@@ -1,9 +1,20 @@
 /**
- * Formatea un número como moneda colombiana (COP)
+ * Formatea un número como moneda
  * @param {number} amount - Monto a formatear
- * @returns {string} - Cadena formateada (ej: $1.000.000)
+ * @param {string} currency - Código de moneda (COP, USD, EUR) - Default: COP
+ * @returns {string} - Cadena formateada
  */
-function formatCurrency(amount) {
+function formatCurrency(amount, currency = 'COP') {
+    if (currency === 'USD') {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        }).format(amount);
+    }
+
+    // Default COP format (no decimals usually)
     return new Intl.NumberFormat('es-CO', {
         style: 'currency',
         currency: 'COP',

@@ -58,24 +58,23 @@ class OnboardingService {
                 case 'confirm_liabilities': // NEW: Confirm Liabilities
                     return await this.handleConfirmLiabilitiesStep(user, cleanMessage);
 
-                case 'reminder_intro': // NEW: Reminder Intro
-                    return await this.handleReminderIntroStep(user, cleanMessage);
+                case 'menu_selection': // NEW: Menu selection
+                    return await this.handleMenuSelectionStep(user, cleanMessage);
 
-                case 'reminder_creation_onboarding': // NEW: Create Reminder
+                case 'reminder_creation_onboarding': // Reactivated
                     return await this.handleReminderCreationOnboardingStep(user, cleanMessage);
 
-                case 'tutorial_explanation': // NEW: Bridge step
-                    return await this.handleTutorialExplanationStep(user, cleanMessage);
-
-                case 'first_expense':
+                case 'first_expense': // Reactivated
                     return await this.handleFirstExpenseStep(user, cleanMessage);
 
-                case 'confirm_first_expense': // NEW: Confirm Expense
+                case 'confirm_first_expense': // Reactivated
                     return await this.handleConfirmFirstExpenseStep(user, cleanMessage);
 
-                case 'expense_account':
+                case 'expense_account': // Reactivated
                     return await this.handleExpenseAccountStep(user, cleanMessage);
 
+                // --- STEPS REMOVED: Goals, Risk ---
+                /*
                 case 'goals_input': // NEW: Goals
                     return await this.handleGoalsStep(user, cleanMessage);
 
@@ -84,6 +83,7 @@ class OnboardingService {
 
                 case 'diagnosis_display': // NEW: Diagnosis rating
                     return await this.handleDiagnosisRatingStep(user, cleanMessage);
+                */
 
                 default:
                     return "¡Ya casi terminamos! ¿Estás listo para comenzar? 💜";
@@ -111,7 +111,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a mover números, una cosa importante:\ntu privacidad es sagrada para mí.\n\nRecuerda:\n1️⃣ Respetamos la privacidad de tus datos.\n2️⃣ La IA solo usa tu información para ayudarte.\n3️⃣ No damos asesoría financiera (ejemplo: invierte todo tu capital en criptomonedas). Somos una herramienta educativa.\n\nPara ayudarte bien necesito tu permiso para tratar tus datos de forma segura.\n¿Aceptas los términos y condiciones? 🟣`,
+            message: `¡Un gusto, ${name}! 💜\n\nAntes de empezar a mover números, una cosa importante:\ntu privacidad es sagrada para mí.\n\nRecuerda:\n1️⃣ Respetamos la privacidad de tus datos.\n2️⃣ La IA solo usa tu información para ayudarte.\n3️⃣ No damos asesoría financiera, te ayudamos en el camino. Somos una herramienta educativa.\n\nPara ayudarte bien necesito tu permiso para tratar tus datos de forma segura.\n¿Aceptas los términos y condiciones? 🟣`,
             buttons: [{ id: 'accept', title: '⚜️ Acepto' }, { id: 'terms', title: '🌂 Leer términos' }]
         };
     }
@@ -178,13 +178,26 @@ class OnboardingService {
         }
 
         // Prepare preview
-        let totalAssets = 0;
+        let totalAssetsCOP = 0;
+        let totalAssetsUSD = 0;
         let summary = "Confirma si entendí bien lo que tienes:\n\n";
+
         for (const acc of accounts) {
-            totalAssets += acc.balance;
-            summary += `✅ ${acc.name}: ${formatCurrency(acc.balance)}\n`;
+            const currency = acc.currency || 'COP';
+            if (currency === 'COP') totalAssetsCOP += acc.balance;
+            else if (currency === 'USD') totalAssetsUSD += acc.balance;
+
+            summary += `✅ ${acc.name}: ${formatCurrency(acc.balance, currency)}\n`;
         }
-        summary += `\n💰 Total: ${formatCurrency(totalAssets)}`;
+
+        let totalStr = "";
+        if (totalAssetsCOP > 0) totalStr += formatCurrency(totalAssetsCOP, 'COP');
+        if (totalAssetsUSD > 0) {
+            if (totalStr) totalStr += " + ";
+            totalStr += formatCurrency(totalAssetsUSD, 'USD');
+        }
+
+        summary += `\n💰 Total: ${totalStr || '$0'}`;
 
         // Save temp data and move to confirmation
         await UserDBService.updateUser(user.phone_number, {
@@ -220,27 +233,40 @@ class OnboardingService {
         const existing = await AccountDBService.findByUser(user.user_id);
         for (const acc of existing) await AccountDBService.delete(acc.account_id);
 
-        let totalAssets = 0;
+        let totalAssetsCOP = 0;
+        let totalAssetsUSD = 0;
         let summaryText = "";
 
         for (const acc of accounts) {
+            const currency = acc.currency || 'COP';
             await AccountDBService.create({
                 userId: user.user_id,
                 name: acc.name,
                 type: acc.type || 'savings',
                 balance: acc.balance,
-                isDefault: acc.type === 'cash',
+                currency: currency,
+                isDefault: acc.type === 'cash' && currency === 'COP',
                 icon: acc.type === 'cash' ? '🟪' : '🟣'
             });
-            totalAssets += acc.balance;
-            summaryText += `${acc.type === 'cash' ? '🟪' : '🟣'} ${acc.name}: ${formatCurrency(acc.balance)}\n`;
+
+            if (currency === 'COP') totalAssetsCOP += acc.balance;
+            else if (currency === 'USD') totalAssetsUSD += acc.balance;
+
+            summaryText += `${acc.type === 'cash' ? '🟪' : '🟣'} ${acc.name}: ${formatCurrency(acc.balance, currency)}\n`;
+        }
+
+        let totalStr = "";
+        if (totalAssetsCOP > 0) totalStr += formatCurrency(totalAssetsCOP, 'COP');
+        if (totalAssetsUSD > 0) {
+            if (totalStr) totalStr += " + ";
+            totalStr += formatCurrency(totalAssetsUSD, 'USD');
         }
 
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_data: { step: 'initial_liabilities', total_assets: totalAssets, assets_summary_final: summaryText }
+            onboarding_data: { step: 'initial_liabilities', total_assets: totalStr, assets_summary_final: summaryText }
         });
 
-        return `¡Listo! Tienes ${formatCurrency(totalAssets)} a tu favor. 🏆\n\nAhora vamos por tu tranquilidad financiera. No veas las deudas como un problema, sino como algo que vamos a gestionar juntos. ¿Qué compromisos o saldos tienes pendientes por pagar hoy?\n\nNota: recuerda aclarar el cupo de la tarjeta de credito y cuanto has gastado\n\nEjemplo: " Debo 1M a mi tía y 200.000 de un credito, ademas tengo una tarje de credito con cupo de 2M y gastado 500 mil"\n\nSi no tienes, escribe: Cero.`;
+        return `¡Listo! Tienes ${totalStr} a tu favor. 🏆\n\nAhora vamos por tu tranquilidad financiera. No veas las deudas como un problema, sino como algo que vamos a gestionar juntos. ¿Qué compromisos o saldos tienes pendientes por pagar hoy?\n\nNota: Si tienes tarjeta de credito recuerda aclarar el cupo y cuanto has gastado\n\nEjemplo: " Debo 1M a mi tía y 200.000 de un credito, ademas tengo una tarje de credito con cupo de 2M y gastado 500 mil"\n\nSi no tienes, escribe: Cero.`;
     }
 
     async handleInitialLiabilitiesStep(user, message) {
@@ -261,7 +287,15 @@ class OnboardingService {
 
             summary = "Confirma tus DEUDAS:\n\n";
             for (const debt of tempLiabilities) {
-                summary += `🟣 ${debt.name}: ${formatCurrency(debt.amount)}\n`;
+                if (debt.type === 'credit_card') {
+                    // Format credit cards with cupo/usado
+                    const limit = debt.credit_limit || 0;
+                    const used = debt.amount_used || 0;
+                    summary += `💳 ${debt.name}: Cupo ${formatCurrency(limit)}, Usado ${formatCurrency(used)}\n`;
+                } else {
+                    // Format regular debts
+                    summary += `🟣 ${debt.name}: ${formatCurrency(debt.amount)}\n`;
+                }
             }
         }
 
@@ -298,28 +332,92 @@ class OnboardingService {
         let totalLiabilities = 0;
 
         for (const debt of debts) {
-            await AccountDBService.create({
-                userId: user.user_id,
-                name: debt.name,
-                type: debt.type || 'debt',
-                balance: debt.amount,
-                icon: '🟣',
-                color: '#8b5cf6'
-            });
-            totalLiabilities += debt.amount;
+            if (debt.type === 'credit_card') {
+                // Create credit card with proper cupo/usado fields
+                const used = debt.amount_used || 0;
+                const limit = debt.credit_limit || 0;
+
+                await AccountDBService.create({
+                    userId: user.user_id,
+                    name: debt.name,
+                    type: 'credit_card',
+                    balance: used,           // Lo usado es la deuda actual
+                    creditLimit: limit,      // El cupo total
+                    icon: '💳',
+                    color: '#ef4444'         // Red for credit cards
+                });
+                totalLiabilities += used;   // Solo cuenta lo usado como deuda
+            } else {
+                // Create regular debt account
+                await AccountDBService.create({
+                    userId: user.user_id,
+                    name: debt.name,
+                    type: debt.type || 'debt',
+                    balance: debt.amount,
+                    icon: '🟣',
+                    color: '#8b5cf6'
+                });
+                totalLiabilities += debt.amount;
+            }
         }
 
         const assets = data.total_assets || 0;
 
+        // Move to Menu Selection
         await UserDBService.updateUser(user.phone_number, {
+            // onboarding_completed: false, // Still in onboarding
             onboarding_data: {
                 ...data,
-                step: 'reminder_intro',
+                step: 'menu_selection',
                 total_liabilities: totalLiabilities
             }
         });
 
-        return `Listo el diagnóstico base 🎩\n\n🏆 Tu dinero: ${formatCurrency(assets)}\n🟣 Tus deudas: ${formatCurrency(totalLiabilities)}\n\nAntes de seguir, déjame contarte algo importante 💜\n\nUna de mis funciones favoritas es que me convierto en tu memoria financiera 🌂\n\nPuedo recordarte cosas como:\n• Pagar el gas o el agua cierto día del mes\n• La cuota de una deuda\n• Un cobro que tienes pendiente\n• Cualquier pago recurrente que no quieras olvidar\n\nTú solo me dices qué, cuándo y cada cuánto, y yo me encargo del resto 🟪💜\n\n¿Quieres crear un recordatorio ahora mismo o prefieres continuar?\n(Responde "Agendar" o "Continuar")`;
+        // Safe display for assets (which might be a string due to currency support)
+        const assetsDisplay = typeof assets === 'string' ? assets : formatCurrency(assets);
+
+        return {
+            message: `Tu balance inicial: 🎩\n\n🏆 Activos: ${assetsDisplay}\n🟣 Pasivos: ${formatCurrency(totalLiabilities)}\n\nListo, ya tenemos todo lo necesario para comenzar, como asistente financiero estoy aquí para ayudarte, ¿te gustaría probar alguna de mis funciones?`,
+            buttons: [
+                { id: 'reminders', title: 'Crear recordatorios' },
+                { id: 'register', title: 'Registrar gastos/ingresos' },
+                { id: 'exit', title: 'En este momento no' }
+            ]
+        };
+    }
+
+    async handleMenuSelectionStep(user, message) {
+        const selection = message.toLowerCase();
+
+        if (selection.includes('recordatorio')) {
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: {
+                    ...user.onboarding_data,
+                    step: 'reminder_creation_onboarding',
+                    tried_reminders: true   // TRACKING
+                }
+            });
+            return "¡Perfecto, vamos con ello! ⚡\n\nEsta es una herramienta superpoderosa para que nunca vuelvas a olvidar una deuda o pagar el recibo del gas.\n\nPara usarlo debes escribir algo como:\n\"Recuérdame pagar el gas todos los 10 de cada mes\"\nO \"recuérdame el miércoles cobrarle a mi tía\".\n\n¡Inténtalo ahora! 👇";
+        }
+
+        if (selection.includes('registrar') || selection.includes('gasto') || selection.includes('ingreso')) {
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: {
+                    ...user.onboarding_data,
+                    step: 'first_expense',
+                    tried_expenses: true    // TRACKING
+                }
+            });
+            return "Como asistente financiero, mi misión es saber en qué estás gastando tu dinero (para que tú tomes el control).\n\nPara llevar las cuentas simplemente debes escribirlo en lenguaje natural, por ejemplo:\n- \"Gasté 100k en el casino\"\n- \"Pagué 2.000 en un refresco\"\n\n¡Vamos, pruébalo! Esta vez no afectará tu balance. 👇";
+        }
+
+        // Exit / Default
+        await UserDBService.updateUser(user.phone_number, {
+            onboarding_completed: true,
+            onboarding_data: { ...user.onboarding_data, step: 'completed' }
+        });
+
+        return "Entiendo que no quieras hacerlo ahora. ¡Sin presiones! 😌\n\nRecuerda que mis funciones principales son:\n\n📌 **Recordatorios**: Para que no se te pasen los pagos.\n💸 **Registro**: Para saber a dónde va tu dinero.\n\nSomos un equipo 💜. Cuando estés listo, solo escríbeme. ¡Hablamos luego!";
     }
 
     async handleReminderIntroStep(user, message) {
@@ -354,11 +452,27 @@ class OnboardingService {
             });
         }
 
+        const data = user.onboarding_data;
+
+        // CHECK CROSS-SELLING
+        if (!data.tried_expenses) {
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: {
+                    ...data,
+                    step: 'first_expense',
+                    tried_expenses: true // Mark as trying
+                }
+            });
+            return `¡Anotado! 📝\n\nRecuerda que la otra de mis funciones es registrar tus gastos o ingresos, vamos a probarla ⚡\n\nPara llevar las cuentas simplemente debes escribirlo en lenguaje natural, por ejemplo:\n- "Gasté 100k en el casino"\n- "Pagué 2.000 en un refresco"\n\n¡Vamos, pruébalo! 👇`;
+        }
+
+        // HAS TRIED BOTH (or explicitly skipped)
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_data: { ...user.onboarding_data, step: 'goals_input' }
+            onboarding_completed: true,
+            onboarding_data: { ...data, step: 'completed' }
         });
 
-        return `¡Anotado! 📝 Te avisaré a tiempo.\n\n---\n\n¡Perfecto! 🏆 Ya tenemos la base clara.\n\nAhora, para ser el mejor equipo, necesito saber qué es lo que realmente te mueve.\nCuéntame con confianza:\n\n**¿Qué quieres lograr o cambiar en tu vida financiera próximamente?**\n\nEjemplos:\n• 'Salir de deudas'\n• 'Comprar una moto'\n• 'Viajar'\n• 'Tener tranquilidad'`;
+        return `¡Anotado! 📝 Te avisaré a tiempo.\n\n---\n\n¡Excelente! 🎉\n\nEstas son funciones para automatizar y llevar el control de tus cosas que seguro te van a ser muy útiles.\n\nPero además, recuerda que cualquier duda que tengas, como por ejemplo:\n• "¿Cuánto gasté en comida el último mes?"\n• "¿Cómo mejoro el uso de mi tarjeta de crédito?"\n• Conceptos de finanzas personales\n\nEstaré allí para responderte y estar contigo en el camino. 💜\n\n¡Empecemos!`;
     }
 
     async handleTutorialExplanationStep(user, message) {
@@ -499,15 +613,34 @@ class OnboardingService {
             target.name
         );
 
-        // Move to Goals
+
+
+        // CHECK CROSS-SELLING
+        if (!data.tried_reminders) {
+            await UserDBService.updateUser(user.phone_number, {
+                onboarding_data: {
+                    ...data,
+                    step: 'reminder_creation_onboarding',
+                    tried_reminders: true // Mark as trying
+                }
+            });
+
+            const typeMsg = type === 'income' ? 'Ingreso' : 'Gasto';
+            const transactionMsg = `✅ ${typeMsg} registrado y categorizado a **${category}**`;
+
+            return `¡Listo! ${warningMsg}\n${transactionMsg}.\n\nRecuerda que otra de mis funciones es recordarte las cosas importantes para que nunca vuelvas a sufrir por un recibo vencido 🌂\n\nPara usarlo debes escribir algo como:\n"Recuérdame pagar el gas todos los 10 de cada mes"\nO "recuérdame el miércoles cobrarle a mi tía".\n\n¡Inténtalo ahora! 👇`;
+        }
+
+        // HAS TRIED BOTH (or explicitly skipped)
         await UserDBService.updateUser(user.phone_number, {
-            onboarding_data: { step: 'goals_input' }
+            onboarding_completed: true,
+            onboarding_data: { ...data, step: 'completed' }
         });
 
         const typeMsg = type === 'income' ? 'Ingreso' : 'Gasto';
         const transactionMsg = `✅ ${typeMsg} registrado y categorizado a **${category}**`;
 
-        return `¡Listo! ${warningMsg}\n${transactionMsg}.\n\n💡 **Dato Curioso:**\nTus gastos e ingresos se organizan automáticamente.\n\n---\n\nAhora sí, **FASE 3: EL FUTURO** 🚀\n\n¿Para qué quieres organizar tu dinero?\n\nEjemplos:\n- "Quiero comprar una moto"\n- "Salir de deudas"\n- "Viajar a Europa"\n- "Tener paz mental"`;
+        return `¡Listo! ${warningMsg}\n${transactionMsg}.\n\n---\n\n¡Excelente! 🎉\n\nEstas son funciones para automatizar y llevar el control de tus cosas que seguro te van a ser muy útiles.\n\nPero además, recuerda que cualquier duda que tengas, como por ejemplo:\n• "¿Cuánto gasté en comida el último mes?"\n• "¿Cómo mejoro el uso de mi tarjeta de crédito?"\n• Conceptos de finanzas personales\n\nEstaré allí para responderte y estar contigo en el camino. 💜\n\n¡Empecemos!`;
     }
 
     async handleGoalsStep(user, message) {

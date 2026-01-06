@@ -76,12 +76,15 @@ class AIService {
       - Clasifica el TIPO:
         - "cash": Efectivo, billetes, bolsillo, alcancía, físico.
         - "savings": Bancos, Nequi, Daviplata, Tarjetas, Ahorros, Inversiones.
-      - Si no menciona nombre pero hay montos implícitos, usa "Efectivo" o "Banco" según contexto.
+      
+      MONEDA (NUEVO):
+      - Si menciona "dolares", "usd", "us", "bucks" -> currency: "USD"
+      - Si menciona "pesos", "cop", "lucas", "barras", o no dice nada explícito -> currency: "COP"
       
       Responde EXCLUSIVAMENTE con un objeto JSON válido con este formato:
       {
         "accounts": [
-          { "name": "NombreCuenta", "balance": 10000, "type": "cash" | "savings" }
+          { "name": "NombreCuenta", "balance": 10000, "type": "cash" | "savings", "currency": "COP" | "USD" }
         ]
       }
       `;
@@ -165,7 +168,7 @@ class AIService {
   /**
    * Extrae deudas y pasivos del texto
    * @param {string} message 
-   * @returns {Promise<Object>} { liabilities: [{ name, amount, type: 'loan'|'credit_card'|'debt' }] }
+   * @returns {Promise<Object>} { liabilities: [{ name, amount, type, credit_limit?, amount_used? }] }
    */
   async extractLiabilities(message) {
     try {
@@ -178,15 +181,22 @@ class AIService {
       - 'loan': Préstamos bancarios, libranzas, créditos libre inversión, hipotecario, ICETEX.
       - 'debt': "Culebras", deudas a personas, gota a gota, fiado.
 
+      REGLAS IMPORTANTES:
+      - Para 'credit_card': Extrae "credit_limit" (cupo total) y "amount_used" (lo gastado/usado). NO uses "amount".
+      - Para 'loan' y 'debt': Extrae "amount" (el monto total de la deuda).
+
       Output JSON:
-      { "liabilities": [ { "name": "Visa", "amount": 100000, "type": "credit_card" } ] }
+      { "liabilities": [ 
+          { "name": "Préstamo tía", "amount": 1000000, "type": "debt" },
+          { "name": "Visa Bancolombia", "type": "credit_card", "credit_limit": 2000000, "amount_used": 500000 }
+      ] }
       Si dice "No tengo deudas" o "Cero", devuelve array vacío.
       `;
 
       const response = await this.client.chat.completions.create({
         model: config.openai.model,
         messages: [
-          { role: "system", content: "Eres un extractor de datos financieros." },
+          { role: "system", content: "Eres un extractor de datos financieros experto en identificar cupos y deudas." },
           { role: "user", content: prompt }
         ],
         temperature: 0,
