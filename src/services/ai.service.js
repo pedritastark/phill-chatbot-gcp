@@ -78,7 +78,8 @@ class AIService {
         - "savings": Bancos, Nequi, Daviplata, Tarjetas, Ahorros, Inversiones.
       
       MONEDA (NUEVO):
-      - Si menciona "dolares", "usd", "us", "bucks" -> currency: "USD"
+      - Si menciona "dolares", "dolars", "usd", "us", "bucks" -> currency: "USD"
+      - Si menciona "euros", "eur" -> currency: "EUR"
       - Si menciona "pesos", "cop", "lucas", "barras", o no dice nada explícito -> currency: "COP"
       
       Responde EXCLUSIVAMENTE con un objeto JSON válido con este formato:
