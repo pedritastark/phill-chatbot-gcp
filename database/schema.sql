@@ -88,6 +88,7 @@ CREATE TABLE accounts (
     
     -- Información financiera
     balance DECIMAL(12, 2) DEFAULT 0,
+    currency VARCHAR(10) DEFAULT 'COP', -- COP, USD, EUR
     credit_limit DECIMAL(12, 2), -- Para tarjetas de crédito
     interest_rate DECIMAL(5, 2), -- Tasa de interés
     

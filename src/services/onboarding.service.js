@@ -138,7 +138,7 @@ class OnboardingService {
         });
 
         return {
-            message: `¡Excelente! 🏆 Estás a un paso de tomar el control.\n\nPara ayudarte de verdad, necesito saber con qué herramientas contamos. Aquí no hay juicios, solo estrategia para crecer.\n\nCuéntame, ¿cuánto tienes hoy y en qué lugares (cuentas o efectivo) está?\n\nEjemplo:\n'300k en Nequi, 2M en Bancolombia, 50 mil en efectivo, 800.000 debajo del colchón y 25 Dólares'`
+            message: `¡Excelente! 🏆 Estás a un paso de tomar el control.\n\nPara ayudarte de verdad, necesito saber con qué herramientas contamos. Aquí no hay juicios, solo estrategia para crecer.\n\nCuéntame, ¿cuánto tienes hoy y en qué lugares (cuentas o efectivo) está?\n\nEjemplo:\n'300k en Nequi, 2M en Bancolombia, 50 mil en efectivo, 800.000 debajo del colchón y 25 Dólares"\n\nNota: Si tienes tarjetas de crédito este NO es el momento para registrarlas`
         };
     }
 
