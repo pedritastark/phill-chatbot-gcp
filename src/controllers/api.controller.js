@@ -70,6 +70,11 @@ class ApiController {
 
             await WhatsAppService.sendMessage(whatsappFormat, otpMessage);
 
+            // SPECIAL CASE: Log OTP for demo user or development environment
+            if (normalizedPhone === '+573001234567' || process.env.NODE_ENV !== 'production') {
+                Logger.info(`🔐 OTP para ${normalizedPhone}: ${authToken.otp_code}`);
+            }
+
             Logger.info(`📱 OTP enviado a ${normalizedPhone}`);
 
             return res.status(200).json({
