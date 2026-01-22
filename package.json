@@ -10,6 +10,7 @@
     "migrate:status": "node scripts/migrate.js status",
     "migrate:reset": "node scripts/migrate.js reset",
     "migrate:seed": "node scripts/migrate-seed.js",
+    "seed": "node scripts/seed.js",
     "lint": "eslint .",
     "prep": "npm run lint",
     "prepare": "husky"
