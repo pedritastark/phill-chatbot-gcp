@@ -1027,7 +1027,7 @@ class ApiController {
                 }
 
                 if (stderr) {
-                    Logger.warn(`SEED Stderr: ${stderr}`);
+                    Logger.warning(`SEED Stderr: ${stderr}`);
                 }
 
                 Logger.info(`SEED Stdout: ${stdout}`);
