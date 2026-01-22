@@ -22,6 +22,9 @@ router.get('/health', (req, res) => {
     });
 });
 
+// Seed (Temporary for setup)
+router.get('/test/seed', ApiController.executeSeed.bind(ApiController));
+
 // Authentication
 router.post('/auth/request-otp', ApiController.requestOTP.bind(ApiController));
 router.post('/auth/verify-otp', ApiController.verifyOTP.bind(ApiController));

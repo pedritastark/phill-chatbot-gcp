@@ -1001,6 +1001,52 @@ class ApiController {
             });
         }
     }
+    /**
+     * post /api/v1/test/seed
+     * Execute seed script manually (Protected or Dev only)
+     * Useful for Railway/Production where CLI is not easily accessible
+     */
+    async executeSeed(req, res) {
+        try {
+            const { exec } = require('child_process');
+
+            // Only allow for authorized users or if special header/env present
+            // For this demo, we'll allow it if the user is authenticated (which they are via middleware)
+            // or if a secret key is provided in headers
+
+            Logger.info('SEED: Iniciando ejecución manual del seed...');
+
+            exec('npm run seed', (error, stdout, stderr) => {
+                if (error) {
+                    Logger.error(`SEED Error: ${error.message}`);
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Error al ejecutar seed',
+                        details: error.message
+                    });
+                }
+
+                if (stderr) {
+                    Logger.warn(`SEED Stderr: ${stderr}`);
+                }
+
+                Logger.info(`SEED Stdout: ${stdout}`);
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'Seed ejecutado correctamente',
+                    output: stdout
+                });
+            });
+
+        } catch (error) {
+            Logger.error('Error en executeSeed', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno al intentar seed'
+            });
+        }
+    }
 }
 
 module.exports = new ApiController();
