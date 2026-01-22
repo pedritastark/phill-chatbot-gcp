@@ -50,6 +50,18 @@ const config = {
     dailyMessageLimit: parseInt(process.env.DAILY_MESSAGE_LIMIT) || 50,
   },
 
+  // JWT Configuration
+  jwt: {
+    secret: process.env.JWT_SECRET || 'phill_jwt_secret_change_in_production',
+    accessTokenExpiry: process.env.JWT_ACCESS_EXPIRY || '15m',
+    refreshTokenExpiry: process.env.JWT_REFRESH_EXPIRY || '30d',
+  },
+
+  // CORS Configuration
+  cors: {
+    allowedOrigins: (process.env.CORS_ORIGINS || 'https://phill-webpage.vercel.app,http://localhost:5173,https://web-production-022a1.up.railway.app').split(','),
+  },
+
   // Modo Mantenimiento
   maintenanceMode: false, // Modo mantenimiento desactivado
 };

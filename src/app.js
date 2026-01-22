@@ -1,6 +1,9 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors');
 const webhookController = require('./controllers/webhook.controller');
+const apiRoutes = require('./routes/api.routes');
+const { config } = require('./config/environment');
 const Logger = require('./utils/logger');
 
 /**
@@ -8,6 +11,24 @@ const Logger = require('./utils/logger');
  */
 function createApp() {
   const app = express();
+
+  // CORS Configuration for Web Dashboard
+  app.use(cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      if (config.cors.allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        Logger.warning(`CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
 
   // Middlewares
   app.use(bodyParser.urlencoded({ extended: false }));
@@ -22,6 +43,11 @@ function createApp() {
   // Servir archivos estáticos (para reportes PDF)
   const path = require('path');
   app.use('/public', express.static(path.join(__dirname, '../public')));
+
+  // ==========================================
+  // API Routes for Web Dashboard
+  // ==========================================
+  app.use('/api/v1', apiRoutes);
 
   // Rutas
   app.get('/health', webhookController.healthCheck.bind(webhookController));

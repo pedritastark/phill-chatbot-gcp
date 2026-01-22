@@ -48,6 +48,10 @@ async function startServer() {
     const ReminderScheduler = require('./src/services/reminder.scheduler');
     ReminderScheduler.start();
 
+    // Iniciar el Core Scheduler (Pagos pendientes, reportes, etc)
+    const SchedulerService = require('./src/services/scheduler.service');
+    SchedulerService.init();
+
   } catch (error) {
     Logger.error('Error al iniciar el servidor', error);
     process.exit(1);

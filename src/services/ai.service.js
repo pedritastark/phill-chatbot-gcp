@@ -226,10 +226,28 @@ class AIService {
       - type: 'income' (Ganó dinero, recibió pago, salario, venta, encontró plata)
       - type: 'expense' (Gastó, compró, pagó, le cobraron, perdió plata)
       
-      Extrae monto (amount) y descripción corta.
+      Extrae:
+      - amount (número puro).
+      - description (corta).
+      
+      CAMPOS NUEVOS (OBLIGATORIOS):
+      - currency (ISO 4217):
+        * Si menciona "dolares", "usd", "bucks" -> 'USD'
+        * Si menciona "euros", "eur" -> 'EUR'
+        * Si menciona "pesos", "cop", "lucas", "barras", o NADA -> 'COP' (Default Contexto Colombia)
+        
+      - status (Estado de la transacción):
+        * Si ya ocurrió ("Gasté", "Pagué", "Compré", "Fui a") -> 'completed'
+        * Si es futuro/plan ("Tengo que pagar", "Debo pagar", "Recordar pagar") -> 'pending'
       
       Output JSON:
-      { "type": "expense", "amount": 50000, "description": "Comida" }
+      { 
+        "type": "expense", 
+        "amount": 50000, 
+        "description": "Comida",
+        "currency": "COP",
+        "status": "completed"
+      }
       `;
 
       const response = await this.client.chat.completions.create({
@@ -325,6 +343,7 @@ class AIService {
           description: "Registrar un nuevo gasto o ingreso financiero",
           parameters: {
             type: "object",
+            required: ["type", "amount", "description"],
             properties: {
               type: {
                 type: "string",
@@ -339,6 +358,16 @@ class AIService {
                 type: "string",
                 description: "Descripción de la transacción (ej: 'comida', 'salario')"
               },
+              currency: {
+                type: "string",
+                enum: ["COP", "USD", "EUR"],
+                description: "Moneda de la transacción. Default: 'COP'."
+              },
+              status: {
+                type: "string",
+                enum: ["completed", "pending"],
+                description: "Estado: 'completed' (pagado) o 'pending' (por pagar). Default: 'completed'."
+              },
               account: {
                 type: "string",
                 description: "Cuenta afectada (ej: 'Nequi', 'Bancolombia', 'Efectivo'). SOLO incluir si el usuario menciona explícitamente una cuenta."
@@ -348,8 +377,7 @@ class AIService {
                 enum: ["Alimentación", "Transporte", "Entretenimiento", "Salud", "Educación", "Servicios", "Compras", "Vivienda", "Inversiones", "Ingreso", "Otros"],
                 description: "Categoría estandarizada de la transacción."
               }
-            },
-            required: ["type", "amount", "description"]
+            }
           }
         }
       },

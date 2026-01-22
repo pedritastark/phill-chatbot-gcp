@@ -26,6 +26,8 @@ class TransactionDBService {
         recurringFrequency,
         detectedByAI,
         confidenceScore,
+        currency,
+        status
       } = transactionData;
 
       const result = await query(
@@ -42,8 +44,10 @@ class TransactionDBService {
           is_recurring,
           recurring_frequency,
           detected_by_ai,
-          confidence_score
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          confidence_score,
+          currency,
+          status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *`,
         [
           userId,
@@ -59,6 +63,8 @@ class TransactionDBService {
           recurringFrequency || null,
           detectedByAI || false,
           confidenceScore || null,
+          currency || 'COP',
+          status || 'completed'
         ]
       );
 
@@ -168,7 +174,7 @@ class TransactionDBService {
   async getSummary(userId, period = 'month') {
     try {
       let dateFilter = '';
-      
+
       switch (period) {
         case 'day':
           dateFilter = "AND transaction_date >= CURRENT_DATE";
@@ -216,7 +222,7 @@ class TransactionDBService {
   async getByCategory(userId, period = 'month') {
     try {
       let dateFilter = '';
-      
+
       switch (period) {
         case 'day':
           dateFilter = "AND t.transaction_date >= CURRENT_DATE";
@@ -437,7 +443,81 @@ class TransactionDBService {
       throw error;
     }
   }
+
+  /**
+   * Obtiene transacciones pendientes de pago hasta una fecha dada
+   * @param {string} dateLimit - Fecha límite (YYYY-MM-DD)
+   * @returns {Promise<Array>}
+   */
+  async getPendingDue(dateLimit) {
+    try {
+      // Postgres compara date directamente si es formato ISO YYYY-MM-DD
+      const result = await query(
+        `SELECT t.*, u.phone_number
+         FROM transactions t
+         JOIN users u ON t.user_id = u.user_id
+         WHERE t.status = 'pending'
+         AND t.is_deleted = false
+         AND DATE(t.transaction_date) <= $1`,
+        [dateLimit]
+      );
+      return result.rows;
+    } catch (error) {
+      Logger.error('Error obteniendo pendientes vencidos', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Busca si existe una transacción pendiente similar (para conciliación)
+   * @param {string} userId
+   * @param {number} amount
+   * @param {string} descriptionFragment
+   * @returns {Promise<Object|null>}
+   */
+  async findPendingMatch(userId, amount, descriptionFragment) {
+    try {
+      // Búsqueda difusa simple: coincidencia de usuario, status pending, y descripción parecida.
+      // El monto puede variar un poco, pero por ahora lo buscamos cercano o ignoramos si la descripción es muy fuerte.
+      // Aquí usaremos ILIKE para descripción y rango de monto del 10%.
+
+      const result = await query(
+        `SELECT * FROM transactions
+         WHERE user_id = $1
+         AND status = 'pending'
+         AND is_deleted = false
+         AND description ILIKE $2
+         AND amount BETWEEN $3 * 0.9 AND $3 * 1.1
+         LIMIT 1`,
+        [userId, `%${descriptionFragment}%`, amount]
+      );
+
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+      Logger.error('Error buscando match de pendiente', error);
+      return null;
+    }
+  }
+
+  /**
+   * Actualiza el estado y fecha de una transacción
+   */
+  async updateStatus(transactionId, status, newDate = null) {
+    const dateVal = newDate || new Date();
+    try {
+      const result = await query(
+        `UPDATE transactions 
+               SET status = $2, transaction_date = $3, updated_at = NOW()
+               WHERE transaction_id = $1
+               RETURNING *`,
+        [transactionId, status, dateVal]
+      );
+      return result.rows[0];
+    } catch (error) {
+      Logger.error('Error actualizando status transacción', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new TransactionDBService();
-

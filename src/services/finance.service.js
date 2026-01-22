@@ -1,6 +1,8 @@
 const { TransactionDBService, CategoryDBService, AccountDBService, UserDBService } = require('./db');
 const Logger = require('../utils/logger');
 const HybridCategorizer = require('./categorizer');
+const Decimal = require('decimal.js');
+const { DateTime } = require('luxon');
 
 /**
  * Servicio de finanzas para gestionar gastos e ingresos
@@ -29,13 +31,50 @@ class FinanceService {
    * @param {number} amount - Monto
    * @param {string} description - Descripción
    * @param {string} categoryName - Nombre de la categoría (opcional)
-   * @param {string} accountName - Nombre de la cuenta (opcional)
+   * @param {string} currency - Moneda (opcional, default 'COP')
+   * @param {string} status - Estado (opcional, default 'completed')
    * @returns {Promise<Object>}
    */
-  async createTransaction(userId, type, amount, description, categoryName = null, accountName = null) {
+  async createTransaction(userId, type, amount, description, categoryName = null, accountName = null, currency = 'COP', status = 'completed') {
     try {
-      // 1. Buscar o crear el usuario
       const user = await UserDBService.findOrCreate({ phoneNumber: userId });
+
+      // 1.5. CONCILIACIÓN DE PENDIENTES
+      // Si el usuario reporta un gasto pagado, verificar si ya existía como pendiente.
+      if (type === 'expense' && status === 'completed') {
+        const pendingMatch = await TransactionDBService.findPendingMatch(user.user_id, amount, description);
+
+        if (pendingMatch) {
+          Logger.info(`🔄 Conciliación exitosa: Resolviendo pendiente ID ${pendingMatch.transaction_id}`);
+
+          // Actualizar la transacción existente a completed
+          const updatedTx = await TransactionDBService.updateStatus(pendingMatch.transaction_id, 'completed');
+
+          // Continuar con lógica de actualización de saldos usando la cuenta real
+          // Necesitamos determinar la cuenta (paso 3) antes de descontar
+          // Pero adelantemos la selección de cuenta para usarla
+
+          let resolvedAccount = accountName
+            ? (await AccountDBService.findByUser(user.user_id)).find(a => a.name.toLowerCase().includes(accountName.toLowerCase()))
+            : null;
+
+          if (!resolvedAccount) resolvedAccount = await AccountDBService.getDefaultAccount(user.user_id);
+
+          // Descontar saldo
+          if (resolvedAccount) {
+            const isLiability = ['credit_card', 'loan', 'debt'].includes(resolvedAccount.type);
+            let op = isLiability ? 'add' : 'subtract';
+            const safeAmount = new Decimal(amount).toNumber();
+            await AccountDBService.updateBalance(resolvedAccount.account_id, safeAmount, op);
+          }
+
+          return {
+            ...updatedTx,
+            was_pending_resolved: true,
+            confirmation_text: `✅ Excelente, marqué tu pendiente de ${description} como pagado.`
+          };
+        }
+      }
 
       // 2. Determinar la categoría
       let category = null;
@@ -103,14 +142,13 @@ class FinanceService {
         description,
         detectedByAI: detectedByAI,
         confidenceScore: confidence,
+        currency: currency || 'COP', // Default safe
+        status: status || 'completed' // Default safe
       });
 
-      // 4.5. Actualizar el saldo de la cuenta
-      // LOGIC:
-      // Asset (Efectivo, Banco): Gasto (subtract), Ingreso (add)
-      // Liability (Tarjeta, Deuda): Gasto (add/increase debt), Ingreso (subtract/pay off)
-
-      if (account) {
+      // 4.5. Actualizar el saldo de la cuenta (SOLO SI ESTÁ COMPLETADA)
+      // Si está pendiente, no movemos el dinero aún.
+      if (account && status === 'completed') {
         const isLiability = ['credit_card', 'loan', 'debt'].includes(account.type);
         let operation = 'add';
 
@@ -124,22 +162,21 @@ class FinanceService {
           else if (type === 'income') operation = 'add'; // Aumenta el dinero
         }
 
-        // Case for 'Transfer'? (Usually handled as separate Expense/Income pair). 
-        // Current logic only sees 'expense' or 'income'.
-
-        await AccountDBService.updateBalance(account.account_id, amount, operation);
+        // Usamos Decimal para asegurar precisión al pasar el monto
+        const safeAmount = new Decimal(amount).toNumber();
+        await AccountDBService.updateBalance(account.account_id, safeAmount, operation);
       }
 
-      // 5. Actualizar Racha (Streak)
-      const today = new Date();
-      // Ajustar a zona horaria Colombia para cálculo de fechas
-      const colombiaTime = new Date(today.getTime() - (5 * 60 * 60 * 1000));
-      const todayStr = colombiaTime.toISOString().split('T')[0];
+      // 5. Actualizar Racha (Streak) usando Luxon para 'America/Bogota'
+      const nowBogota = DateTime.now().setZone('America/Bogota');
+      const todayStr = nowBogota.toFormat('yyyy-MM-dd');
 
       let lastActivityStr = null;
       if (user.last_activity_date) {
-        // Simplificación: Comparar strings YYYY-MM-DD
-        lastActivityStr = new Date(user.last_activity_date).toISOString().split('T')[0];
+        // Asumimos que last_activity_date viene como Date o string YYYY-MM-DD
+        lastActivityStr = DateTime.fromJSDate(new Date(user.last_activity_date))
+          .setZone('America/Bogota')
+          .toFormat('yyyy-MM-dd');
       }
 
       let newStreak = user.current_streak || 0;
@@ -147,9 +184,7 @@ class FinanceService {
 
       if (lastActivityStr !== todayStr) {
         // Calcular ayer
-        const yesterday = new Date(colombiaTime);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayStr = nowBogota.minus({ days: 1 }).toFormat('yyyy-MM-dd');
 
         if (lastActivityStr === yesterdayStr) {
           newStreak++;
@@ -168,7 +203,7 @@ class FinanceService {
         streakMessage = `🔥 Racha actual: ${newStreak} días`;
       }
 
-      Logger.finance(`Transacción registrada: ${type} de $${amount} para ${userId}. Racha: ${newStreak}`);
+      Logger.finance(`Transacción registrada: ${type} de ${currency} $${amount} para ${userId}. Estado: ${status}`);
 
       return {
         ...transaction,
@@ -178,7 +213,12 @@ class FinanceService {
         streak_info: {
           count: newStreak,
           message: streakMessage
-        }
+        },
+        // Info extra para UI/Respuesta
+        is_pending: status === 'pending',
+        confirmation_text: status === 'pending'
+          ? `🗓️ ¡Entendido! Te recordaré este pago de $${amount} ${currency}.`
+          : null
       };
 
     } catch (error) {
@@ -232,16 +272,21 @@ class FinanceService {
 
       const summary = await TransactionDBService.getSummary(user.user_id, period);
 
-      const totalBalance = await AccountDBService.getTotalBalance(user.user_id);
+      const totalBalanceVal = await AccountDBService.getTotalBalance(user.user_id);
+
+      // 🎯 refactor: Usar Decimal para cálculos precisos
+      const totalIncome = new Decimal(summary.total_income || 0);
+      const totalExpenses = new Decimal(summary.total_expenses || 0);
+      const balance = new Decimal(totalBalanceVal || 0);
 
       const result = {
-        totalIncome: parseFloat(summary.total_income) || 0,
-        totalExpenses: parseFloat(summary.total_expenses) || 0,
-        balance: totalBalance,
+        totalIncome: totalIncome.toNumber(),
+        totalExpenses: totalExpenses.toNumber(),
+        balance: balance.toNumber(),
         transactionCount: parseInt(summary.transaction_count) || 0,
         period: `últimos ${days} días`,
-        avgExpense: parseFloat(summary.avg_expense) || 0,
-        avgIncome: parseFloat(summary.avg_income) || 0,
+        avgExpense: new Decimal(summary.avg_expense || 0).toNumber(),
+        avgIncome: new Decimal(summary.avg_income || 0).toNumber(),
       };
 
       Logger.finance(`Resumen generado para ${phoneNumber}: Balance $${result.balance}`);
@@ -363,7 +408,7 @@ class FinanceService {
       `;
 
       const res = await query(sql, params);
-      return parseFloat(res.rows[0].total);
+      return new Decimal(res.rows[0].total || 0).toNumber();
 
     } catch (error) {
       Logger.error(`Error obteniendo gasto en categoría ${categoryName}`, error);
@@ -421,5 +466,32 @@ class FinanceService {
     }
   }
 }
+
+// --- SNIPPET DE PRUEBA MANUAL ---
+/*
+// Copia y pega esto en un archivo temporal para probar:
+const financeService = require('./src/services/finance.service');
+const Logger = require('./src/utils/logger');
+
+async function test() {
+  try {
+    console.log('🧪 Probando creación con Currency y Status...');
+    const result = await financeService.createTransaction(
+      'whatsapp:+573000000000', // Pon tu número real si quieres verlo en DB
+      'expense',
+      12.50,
+      'Netflix Mensual',
+      'Suscripciones',
+      null,
+      'USD',
+      'pending'
+    );
+    console.log('✅ Resultado:', result);
+  } catch (e) {
+    console.error('❌ Error:', e);
+  }
+}
+// test();
+*/
 
 module.exports = new FinanceService();
