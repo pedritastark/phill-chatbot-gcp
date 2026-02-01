@@ -76,25 +76,42 @@ class MessageService {
 
       let user = await UserDBService.findByPhoneNumber(userId);
 
-      // Si el usuario no existe, crearlo e iniciar onboarding
+      // Si el usuario no existe, crearlo sin onboarding
       if (!user) {
         user = await UserDBService.findOrCreate({ phoneNumber: userId });
-        const welcomeMessage = await OnboardingService.startOnboarding(userId);
+
+        // Marcar onboarding como completado inmediatamente
+        await UserDBService.updateUser(userId, {
+          onboarding_completed: true,
+          onboarding_data: { step: 'completed' }
+        });
+
+        // Crear cuenta de efectivo por defecto
+        const AccountDBService = require('./db/account.db.service');
+        const accounts = await AccountDBService.findByUser(user.user_id);
+        if (accounts.length === 0) {
+          await AccountDBService.create({
+            userId: user.user_id,
+            name: 'Efectivo',
+            type: 'cash',
+            balance: 0,
+            isDefault: true,
+            icon: '💵'
+          });
+        }
+
+        const welcomeMessage = "¡Hola! 👋 Soy Phill, tu asistente financiero.\n\nPuedo ayudarte a:\n💰 Registrar gastos e ingresos\n📊 Ver resúmenes financieros\n🎯 Crear metas de ahorro\n⏰ Gestionar recordatorios\n\n¿En qué te ayudo hoy?";
         await ConversationService.addAssistantMessage(userId, welcomeMessage);
         return welcomeMessage;
       }
 
-      // Si el onboarding no está completo, procesar con OnboardingService
+      // ONBOARDING DESHABILITADO - Todos van directo al chat
+      // Si por alguna razón un usuario antiguo no tiene onboarding completado, marcarlo como completado
       if (!user.onboarding_completed) {
-        const onboardingResponse = await OnboardingService.processMessage(userId, message);
-
-        // Extraer texto si es un objeto con botones
-        const msgToLog = (typeof onboardingResponse === 'object' && onboardingResponse.message)
-          ? onboardingResponse.message
-          : onboardingResponse;
-
-        await ConversationService.addAssistantMessage(userId, msgToLog);
-        return onboardingResponse;
+        await UserDBService.updateUser(userId, {
+          onboarding_completed: true,
+          onboarding_data: { step: 'completed' }
+        });
       }
 
       // 0.2. Comando para Deshacer última transacción (/revertir)

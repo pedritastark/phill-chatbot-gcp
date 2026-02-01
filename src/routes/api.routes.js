@@ -77,6 +77,10 @@ router.post('/goals', ApiController.createGoal.bind(ApiController));
 router.put('/goals/:id', ApiController.updateGoal.bind(ApiController));
 router.post('/goals/:id/deposit', ApiController.depositToGoal.bind(ApiController));
 
+// Chatbot Web
+router.post('/chatbot/message', ApiController.sendChatMessage.bind(ApiController));
+router.get('/chatbot/history', ApiController.getChatHistory.bind(ApiController));
+
 // ==========================================
 // 404 Handler for API routes
 // ==========================================

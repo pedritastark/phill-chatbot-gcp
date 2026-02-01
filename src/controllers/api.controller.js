@@ -1526,6 +1526,91 @@ class ApiController {
             });
         }
     }
+    // ==========================================
+    // CHATBOT WEB ENDPOINTS
+    // ==========================================
+
+    /**
+     * POST /api/v1/chatbot/message
+     * Send a message to Phill chatbot from web interface
+     * Uses the same MessageService as WhatsApp
+     */
+    async sendChatMessage(req, res) {
+        try {
+            const user = req.user;
+            const { message } = req.body;
+
+            if (!message || !message.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Mensaje requerido'
+                });
+            }
+
+            Logger.info(`💬 Web chat message from ${user.name}: "${message}"`);
+
+            // Process message using the same service as WhatsApp
+            const MessageService = require('../services/message.service');
+            const response = await MessageService.processMessage(message.trim(), user.phone_number);
+
+            // Extract text if response is an object with buttons
+            let responseText = response;
+            if (typeof response === 'object' && response.message) {
+                responseText = response.message;
+            }
+
+            return res.status(200).json({
+                success: true,
+                response: responseText,
+                timestamp: new Date().toISOString()
+            });
+
+        } catch (error) {
+            Logger.error('Error en sendChatMessage', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al procesar mensaje del chatbot'
+            });
+        }
+    }
+
+    /**
+     * GET /api/v1/chatbot/history
+     * Get chat history for the logged-in user
+     */
+    async getChatHistory(req, res) {
+        try {
+            const user = req.user;
+            const limit = parseInt(req.query.limit) || 50;
+
+            const ConversationDBService = require('../services/db/conversation.db.service');
+            const messages = await ConversationDBService.getConversationHistory(
+                user.phone_number,
+                limit
+            );
+
+            // Format messages for web display
+            const formattedMessages = messages.map(msg => ({
+                id: msg.message_id,
+                type: msg.sender === 'user' ? 'user' : 'bot',
+                text: msg.content,
+                timestamp: msg.created_at
+            }));
+
+            return res.status(200).json({
+                success: true,
+                messages: formattedMessages
+            });
+
+        } catch (error) {
+            Logger.error('Error en getChatHistory', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener historial del chat'
+            });
+        }
+    }
+
     /**
      * post /api/v1/test/seed
      * Execute seed script manually (Protected or Dev only)
