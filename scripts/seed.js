@@ -9,12 +9,14 @@
  */
 
 const { query, closePool } = require('../src/config/database');
+const bcrypt = require('bcrypt');
 
 // Configuration
 const TEST_USER = {
     phone_number: 'whatsapp:+573001234567',
     name: 'Usuario Demo',
     timezone: 'America/Bogota',
+    password: 'Test123', // Default password for seed user
 };
 
 // Categories (Spanish for Colombia)
@@ -184,15 +186,29 @@ async function seed() {
         );
 
         if (user.rows.length === 0) {
+            // Hash password for new user
+            const passwordHash = await bcrypt.hash(TEST_USER.password, 10);
             user = await query(
-                `INSERT INTO users (phone_number, name, timezone, created_at, updated_at)
-         VALUES ($1, $2, $3, NOW(), NOW())
+                `INSERT INTO users (phone_number, name, timezone, password_hash, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, NOW(), NOW())
          RETURNING *`,
-                [TEST_USER.phone_number, TEST_USER.name, TEST_USER.timezone]
+                [TEST_USER.phone_number, TEST_USER.name, TEST_USER.timezone, passwordHash]
             );
             console.log(`   ✓ Usuario creado: ${TEST_USER.name} (${TEST_USER.phone_number})`);
+            console.log(`   ✓ Contraseña configurada: ${TEST_USER.password}`);
         } else {
+            // Update password for existing user
+            const passwordHash = await bcrypt.hash(TEST_USER.password, 10);
+            await query(
+                `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE phone_number = $2`,
+                [passwordHash, TEST_USER.phone_number]
+            );
             console.log(`   ✓ Usuario existente: ${user.rows[0].name} (${TEST_USER.phone_number})`);
+            console.log(`   ✓ Contraseña actualizada: ${TEST_USER.password}`);
+            user = await query(
+                `SELECT * FROM users WHERE phone_number = $1`,
+                [TEST_USER.phone_number]
+            );
         }
 
         const userId = user.rows[0].user_id;
@@ -312,11 +328,12 @@ async function seed() {
    • Balance Total: $${parseInt(totalBalance.rows[0].total).toLocaleString('es-CO')}
 
 📱 Datos de acceso para login web:
-   WhatsApp: +57 3001234567
-   
-💡 Cuando intentes hacer login, el OTP aparecerá:
-   1. En los logs del servidor (development)
-   2. Enviado a tu WhatsApp (production)
+   Teléfono: +57 3001234567
+   Contraseña: ${TEST_USER.password}
+
+💡 Opciones de login:
+   1. Login tradicional: usa el teléfono y contraseña anterior
+   2. Registro OTP: solicita nuevo OTP via WhatsApp (el código aparecerá en logs en development)
 `);
 
     } catch (error) {
