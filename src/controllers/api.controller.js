@@ -8,6 +8,7 @@ const {
 const FinanceService = require('../services/finance.service');
 const WhatsAppService = require('../services/whatsapp.service');
 const Logger = require('../utils/logger');
+const bcrypt = require('bcrypt');
 const {
     generateAccessToken,
     generateRefreshToken,
@@ -94,11 +95,11 @@ class ApiController {
 
     /**
      * POST /api/v1/auth/verify-otp
-     * Verify OTP and return JWT tokens
+     * Verify OTP and return JWT tokens (for registration with password)
      */
     async verifyOTP(req, res) {
         try {
-            const { phone, code } = req.body;
+            const { phone, code, password } = req.body;
 
             if (!phone || !code) {
                 return res.status(400).json({
@@ -134,6 +135,28 @@ class ApiController {
                 });
             }
 
+            // If password is provided, this is a registration - hash and store it
+            if (password) {
+                if (password.length < 6) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'La contraseña debe tener al menos 6 caracteres'
+                    });
+                }
+
+                const saltRounds = 10;
+                const passwordHash = await bcrypt.hash(password, saltRounds);
+
+                // Update user with password
+                const { query } = require('../config/database');
+                await query(
+                    `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2`,
+                    [passwordHash, user.user_id]
+                );
+
+                Logger.success(`✅ Registro completado con contraseña: ${normalizedPhone}`);
+            }
+
             // Generate tokens
             const accessToken = generateAccessToken(user, authToken.token_id);
             const refreshToken = generateRefreshToken(user, authToken.token_id);
@@ -161,6 +184,114 @@ class ApiController {
             return res.status(500).json({
                 success: false,
                 error: 'Error al verificar código'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/auth/login
+     * Login with phone and password (no OTP required)
+     */
+    async login(req, res) {
+        try {
+            const { phone, password } = req.body;
+
+            if (!phone || !password) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Teléfono y contraseña requeridos'
+                });
+            }
+
+            // Normalize phone
+            let normalizedPhone = phone.trim().replace(/\s+/g, '');
+            if (!normalizedPhone.startsWith('+')) {
+                normalizedPhone = '+57' + normalizedPhone.replace(/^0/, '');
+            }
+            const whatsappFormat = `whatsapp:${normalizedPhone}`;
+
+            // Debug logging
+            Logger.info(`🔍 LOGIN - Recibido: "${phone}" → Normalizado: "${normalizedPhone}" → WhatsApp: "${whatsappFormat}"`);
+
+            // Find user
+            const user = await UserDBService.findByPhoneNumber(whatsappFormat);
+            if (!user) {
+                Logger.warning(`⚠️ LOGIN - Usuario no encontrado: ${whatsappFormat}`);
+            }
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    error: 'Teléfono o contraseña incorrectos'
+                });
+            }
+
+            // Check if user has a password set
+            const { query } = require('../config/database');
+            const result = await query(
+                `SELECT password_hash FROM users WHERE user_id = $1`,
+                [user.user_id]
+            );
+
+            if (!result.rows[0].password_hash) {
+                Logger.warning(`⚠️ LOGIN - Sin contraseña configurada: ${whatsappFormat}`);
+                return res.status(400).json({
+                    success: false,
+                    error: 'Esta cuenta no tiene contraseña configurada. Por favor regístrate nuevamente.',
+                    code: 'NO_PASSWORD'
+                });
+            }
+
+            // Verify password
+            const isPasswordValid = await bcrypt.compare(password, result.rows[0].password_hash);
+            Logger.info(`🔑 LOGIN - Validación de contraseña: ${isPasswordValid ? '✅ VÁLIDA' : '❌ INVÁLIDA'}`);
+
+            if (!isPasswordValid) {
+                Logger.warning(`⚠️ LOGIN - Contraseña incorrecta para: ${whatsappFormat}`);
+                return res.status(401).json({
+                    success: false,
+                    error: 'Teléfono o contraseña incorrectos'
+                });
+            }
+
+            // Create auth session
+            const authToken = await AuthDBService.createOTP(user.user_id, {
+                ip: req.ip,
+                userAgent: req.headers['user-agent']
+            });
+
+            // Clear OTP fields since this is password login
+            await query(
+                `UPDATE auth_tokens SET otp_code = NULL, otp_expires_at = NULL WHERE token_id = $1`,
+                [authToken.token_id]
+            );
+
+            // Generate tokens
+            const accessToken = generateAccessToken(user, authToken.token_id);
+            const refreshToken = generateRefreshToken(user, authToken.token_id);
+
+            // Store refresh token
+            await AuthDBService.storeRefreshToken(authToken.token_id, refreshToken);
+
+            Logger.success(`✅ Login con contraseña exitoso: ${normalizedPhone}`);
+
+            return res.status(200).json({
+                success: true,
+                accessToken,
+                refreshToken,
+                user: {
+                    id: user.user_id,
+                    name: user.name,
+                    phone: normalizedPhone,
+                    currency: user.currency,
+                    onboardingCompleted: user.onboarding_completed
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en login', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al iniciar sesión'
             });
         }
     }
@@ -256,7 +387,7 @@ class ApiController {
 
     /**
      * GET /api/v1/me
-     * Get current user profile
+     * Get current user profile with all settings
      */
     async getProfile(req, res) {
         try {
@@ -280,7 +411,23 @@ class ApiController {
                     currentStreak: user.current_streak || 0,
                     totalTransactions: user.total_transactions || 0,
                     onboardingCompleted: user.onboarding_completed,
-                    createdAt: user.created_at
+                    createdAt: user.created_at,
+                    // Settings
+                    settings: {
+                        // Security
+                        twoFactorEnabled: user.two_factor_enabled || false,
+                        // Notifications
+                        notificationEmail: user.notification_email !== false,
+                        notificationSms: user.notification_sms || false,
+                        notificationTransactions: user.notification_transactions !== false,
+                        notificationWeeklyReports: user.notification_weekly_reports !== false,
+                        // Preferences
+                        darkMode: user.dark_mode || false,
+                        soundEffects: user.sound_effects !== false,
+                        // Privacy
+                        dataSharing: user.data_sharing !== false,
+                        analyticsEnabled: user.analytics_enabled !== false,
+                    }
                 }
             });
 
@@ -310,6 +457,7 @@ class ApiController {
                     id: updatedUser.user_id,
                     name: updatedUser.name,
                     email: updatedUser.email,
+                    phone: updatedUser.phone_number.replace('whatsapp:', ''),
                     currency: updatedUser.currency,
                     language: updatedUser.language
                 }
@@ -320,6 +468,280 @@ class ApiController {
             return res.status(500).json({
                 success: false,
                 error: 'Error al actualizar perfil'
+            });
+        }
+    }
+
+    /**
+     * PUT /api/v1/me/settings
+     * Update user settings (notifications, preferences, privacy)
+     */
+    async updateSettings(req, res) {
+        try {
+            const user = req.user;
+            const settings = req.body;
+
+            const updatedUser = await UserDBService.updateSettings(user.user_id, settings);
+
+            return res.status(200).json({
+                success: true,
+                settings: {
+                    twoFactorEnabled: updatedUser.two_factor_enabled || false,
+                    notificationEmail: updatedUser.notification_email !== false,
+                    notificationSms: updatedUser.notification_sms || false,
+                    notificationTransactions: updatedUser.notification_transactions !== false,
+                    notificationWeeklyReports: updatedUser.notification_weekly_reports !== false,
+                    language: updatedUser.language,
+                    currency: updatedUser.currency,
+                    darkMode: updatedUser.dark_mode || false,
+                    soundEffects: updatedUser.sound_effects !== false,
+                    dataSharing: updatedUser.data_sharing !== false,
+                    analyticsEnabled: updatedUser.analytics_enabled !== false,
+                },
+                message: 'Configuración actualizada correctamente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en updateSettings', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al actualizar configuración'
+            });
+        }
+    }
+
+    /**
+     * PUT /api/v1/me/password
+     * Change user password
+     */
+    async changePassword(req, res) {
+        try {
+            const user = req.user;
+            const { currentPassword, newPassword } = req.body;
+
+            if (!currentPassword || !newPassword) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Contraseña actual y nueva son requeridas'
+                });
+            }
+
+            // Validate new password strength
+            if (newPassword.length < 8) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'La nueva contraseña debe tener al menos 8 caracteres'
+                });
+            }
+
+            // Check if user has a password set
+            if (user.password_hash) {
+                const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+                if (!isValidPassword) {
+                    return res.status(401).json({
+                        success: false,
+                        error: 'La contraseña actual es incorrecta'
+                    });
+                }
+            }
+
+            // Hash new password
+            const saltRounds = 10;
+            const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+            // Update password
+            await UserDBService.updatePassword(user.user_id, newPasswordHash);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Contraseña actualizada correctamente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en changePassword', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al cambiar la contraseña'
+            });
+        }
+    }
+
+    /**
+     * GET /api/v1/me/sessions
+     * Get all active sessions for the user
+     */
+    async getSessions(req, res) {
+        try {
+            const user = req.user;
+            const currentToken = req.headers.authorization?.replace('Bearer ', '');
+
+            const { query: dbQuery } = require('../config/database');
+
+            const result = await dbQuery(
+                `SELECT token_id, device_info, ip_address, user_agent, created_at, updated_at
+                 FROM auth_tokens
+                 WHERE user_id = $1 AND is_valid = true AND refresh_token IS NOT NULL
+                 ORDER BY updated_at DESC`,
+                [user.user_id]
+            );
+
+            const sessions = result.rows.map((session, index) => {
+                // Parse device info from user_agent or device_info
+                const userAgent = session.user_agent || '';
+                let device = 'Dispositivo desconocido';
+                let icon = 'monitor';
+
+                if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+                    device = userAgent.includes('iPad') ? 'iPad' : 'iPhone';
+                    icon = 'smartphone';
+                } else if (userAgent.includes('Android')) {
+                    device = 'Android';
+                    icon = 'smartphone';
+                } else if (userAgent.includes('Mac')) {
+                    device = 'MacBook / Mac';
+                    icon = 'monitor';
+                } else if (userAgent.includes('Windows')) {
+                    device = 'Windows PC';
+                    icon = 'monitor';
+                } else if (userAgent.includes('Chrome')) {
+                    device = 'Chrome Browser';
+                    icon = 'monitor';
+                }
+
+                // Check if this is the current session (first one is usually most recent)
+                const isCurrent = index === 0;
+
+                return {
+                    id: session.token_id,
+                    device,
+                    icon,
+                    location: 'Colombia', // Could be enhanced with IP geolocation
+                    ipAddress: session.ip_address,
+                    lastActive: session.updated_at,
+                    createdAt: session.created_at,
+                    current: isCurrent
+                };
+            });
+
+            return res.status(200).json({
+                success: true,
+                sessions
+            });
+
+        } catch (error) {
+            Logger.error('Error en getSessions', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener sesiones'
+            });
+        }
+    }
+
+    /**
+     * DELETE /api/v1/me/sessions/:id
+     * Terminate a specific session
+     */
+    async deleteSession(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+
+            const { query: dbQuery } = require('../config/database');
+
+            const result = await dbQuery(
+                `UPDATE auth_tokens
+                 SET is_valid = false, updated_at = CURRENT_TIMESTAMP
+                 WHERE token_id = $1 AND user_id = $2
+                 RETURNING *`,
+                [id, user.user_id]
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Sesión no encontrada'
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Sesión cerrada correctamente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en deleteSession', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al cerrar sesión'
+            });
+        }
+    }
+
+    /**
+     * DELETE /api/v1/me/sessions
+     * Terminate all sessions except current
+     */
+    async deleteAllSessions(req, res) {
+        try {
+            const user = req.user;
+            const currentToken = req.headers.authorization?.replace('Bearer ', '');
+
+            const { query: dbQuery } = require('../config/database');
+
+            // Invalidate all sessions for this user
+            await dbQuery(
+                `UPDATE auth_tokens
+                 SET is_valid = false, updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = $1 AND is_valid = true`,
+                [user.user_id]
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: 'Todas las sesiones han sido cerradas'
+            });
+
+        } catch (error) {
+            Logger.error('Error en deleteAllSessions', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al cerrar sesiones'
+            });
+        }
+    }
+
+    /**
+     * DELETE /api/v1/me
+     * Delete user account permanently
+     */
+    async deleteAccount(req, res) {
+        try {
+            const user = req.user;
+            const { confirmation } = req.body;
+
+            // Require confirmation phrase
+            if (confirmation !== 'Deseo cerrar mi cuenta') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Frase de confirmación incorrecta'
+                });
+            }
+
+            // Delete user (CASCADE will handle related data)
+            await UserDBService.deleteUser(user.user_id);
+
+            Logger.warning(`⚠️ Cuenta eliminada: ${user.phone_number}`);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Tu cuenta ha sido eliminada permanentemente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en deleteAccount', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al eliminar cuenta'
             });
         }
     }
@@ -464,6 +886,7 @@ class ApiController {
                 amount,
                 description,
                 category,
+                categoryId,
                 accountId,
                 accountName,
                 date,
@@ -486,13 +909,33 @@ class ApiController {
                 });
             }
 
+            // Get account name from accountId if provided
+            let resolvedAccountName = accountName;
+            if (accountId && !accountName) {
+                const accounts = await AccountDBService.findByUser(user.user_id);
+                const account = accounts.find(a => a.account_id === accountId);
+                if (account) {
+                    resolvedAccountName = account.name;
+                }
+            }
+
+            // Get category name from categoryId if provided
+            let resolvedCategory = category;
+            if (categoryId && !category) {
+                const categories = await CategoryDBService.findByUser(user.user_id);
+                const cat = categories.find(c => c.category_id === categoryId);
+                if (cat) {
+                    resolvedCategory = cat.name;
+                }
+            }
+
             const transaction = await FinanceService.createTransaction(
                 user.phone_number,
                 type,
                 parseFloat(amount),
                 description,
-                category || null,
-                accountName || null,
+                resolvedCategory || null,
+                resolvedAccountName || null,
                 currency,
                 status
             );
@@ -934,14 +1377,20 @@ class ApiController {
 
     /**
      * POST /api/v1/goals/:id/deposit
-     * Add money to a goal
+     * Add money to a goal from a specific account
+     * - Validates account exists and belongs to user
+     * - Validates sufficient balance in source account
+     * - Creates expense transaction for the transfer
+     * - Updates account balance
+     * - Updates goal current_amount
      */
     async depositToGoal(req, res) {
         try {
             const user = req.user;
             const { id } = req.params;
-            const { amount } = req.body;
+            const { amount, from_account_id } = req.body;
 
+            // Validate amount
             if (!amount || amount <= 0) {
                 return res.status(400).json({
                     success: false,
@@ -949,34 +1398,105 @@ class ApiController {
                 });
             }
 
+            const parsedAmount = parseFloat(amount);
+
+            // Validate from_account_id is provided
+            if (!from_account_id) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cuenta de origen requerida'
+                });
+            }
+
+            // Get source account and validate it belongs to user
+            const sourceAccount = await AccountDBService.findById(from_account_id);
+            if (!sourceAccount) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Cuenta de origen no encontrada'
+                });
+            }
+
+            if (sourceAccount.user_id !== user.user_id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'No tienes permiso para usar esta cuenta'
+                });
+            }
+
+            // Check sufficient balance (for non-credit accounts)
+            const isLiability = ['credit_card', 'loan', 'debt'].includes(sourceAccount.type);
+            if (!isLiability && parseFloat(sourceAccount.balance) < parsedAmount) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Saldo insuficiente en la cuenta de origen'
+                });
+            }
+
             const { query: dbQuery } = require('../config/database');
 
-            const result = await dbQuery(
-                `UPDATE financial_goals 
-         SET current_amount = current_amount + $3,
-             status = CASE 
-               WHEN (current_amount + $3) >= target_amount THEN 'completed'
-               ELSE status
-             END,
-             completed_at = CASE 
-               WHEN (current_amount + $3) >= target_amount THEN NOW()
-               ELSE completed_at
-             END,
-             updated_at = NOW()
-         WHERE goal_id = $1 AND user_id = $2 AND status = 'active'
-         RETURNING *`,
-                [id, user.user_id, parseFloat(amount)]
+            // First verify the goal exists and is active
+            const goalCheck = await dbQuery(
+                `SELECT * FROM financial_goals WHERE goal_id = $1 AND user_id = $2 AND status = 'active'`,
+                [id, user.user_id]
             );
 
-            if (result.rows.length === 0) {
+            if (goalCheck.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     error: 'Meta no encontrada o no está activa'
                 });
             }
 
+            const goalData = goalCheck.rows[0];
+
+            // Find or create "Ahorro" category for expense
+            const savingsCategory = await CategoryDBService.findOrCreate(
+                user.user_id,
+                'Ahorro',
+                'expense'
+            );
+
+            // Create the transaction (expense from source account)
+            const transaction = await TransactionDBService.create({
+                userId: user.user_id,
+                accountId: from_account_id,
+                categoryId: savingsCategory.category_id,
+                type: 'expense',
+                amount: parsedAmount,
+                description: `Depósito a meta: ${goalData.name}`,
+                transactionDate: new Date(),
+                notes: `Transferencia automática a meta de ahorro "${goalData.name}"`,
+                currency: sourceAccount.currency || 'COP',
+                status: 'completed'
+            });
+
+            // Update account balance (subtract for assets, add for liabilities)
+            const operation = isLiability ? 'add' : 'subtract';
+            await AccountDBService.updateBalance(from_account_id, parsedAmount, operation);
+
+            // Update goal current_amount
+            const result = await dbQuery(
+                `UPDATE financial_goals
+                 SET current_amount = current_amount + $3,
+                     status = CASE
+                       WHEN (current_amount + $3) >= target_amount THEN 'completed'
+                       ELSE status
+                     END,
+                     completed_at = CASE
+                       WHEN (current_amount + $3) >= target_amount THEN NOW()
+                       ELSE completed_at
+                     END,
+                     updated_at = NOW()
+                 WHERE goal_id = $1 AND user_id = $2 AND status = 'active'
+                 RETURNING *`,
+                [id, user.user_id, parsedAmount]
+            );
+
             const goal = result.rows[0];
             const isCompleted = goal.status === 'completed';
+
+            Logger.success(`✅ Depósito a meta "${goal.name}": $${parsedAmount} desde ${sourceAccount.name}`);
 
             return res.status(200).json({
                 success: true,
@@ -988,9 +1508,14 @@ class ApiController {
                     progress: Math.round((goal.current_amount / goal.target_amount) * 100),
                     status: goal.status
                 },
+                transaction: {
+                    id: transaction.transaction_id,
+                    amount: parsedAmount,
+                    fromAccount: sourceAccount.name
+                },
                 message: isCompleted
                     ? `¡Felicidades! Completaste tu meta "${goal.name}" 🎉`
-                    : `Depósito de $${amount} agregado a "${goal.name}"`
+                    : `Depósito de $${parsedAmount.toLocaleString('es-CO')} agregado a "${goal.name}"`
             });
 
         } catch (error) {
