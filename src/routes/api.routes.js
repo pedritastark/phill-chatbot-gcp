@@ -28,6 +28,7 @@ router.get('/test/seed', ApiController.executeSeed.bind(ApiController));
 // Authentication
 router.post('/auth/request-otp', ApiController.requestOTP.bind(ApiController));
 router.post('/auth/verify-otp', ApiController.verifyOTP.bind(ApiController));
+router.post('/auth/login', ApiController.login.bind(ApiController));
 router.post('/auth/refresh', ApiController.refreshToken.bind(ApiController));
 
 // ==========================================
@@ -43,6 +44,16 @@ router.post('/auth/logout', ApiController.logout.bind(ApiController));
 // User Profile
 router.get('/me', ApiController.getProfile.bind(ApiController));
 router.put('/me', ApiController.updateProfile.bind(ApiController));
+router.delete('/me', ApiController.deleteAccount.bind(ApiController));
+
+// User Settings
+router.put('/me/settings', ApiController.updateSettings.bind(ApiController));
+router.put('/me/password', ApiController.changePassword.bind(ApiController));
+
+// User Sessions
+router.get('/me/sessions', ApiController.getSessions.bind(ApiController));
+router.delete('/me/sessions', ApiController.deleteAllSessions.bind(ApiController));
+router.delete('/me/sessions/:id', ApiController.deleteSession.bind(ApiController));
 
 // Dashboard
 router.get('/summary', ApiController.getSummary.bind(ApiController));

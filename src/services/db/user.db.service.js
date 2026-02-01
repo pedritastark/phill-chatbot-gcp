@@ -196,6 +196,114 @@ class UserDBService {
   }
 
   /**
+   * Actualiza las configuraciones de un usuario (settings)
+   * @param {string} userId - UUID del usuario
+   * @param {Object} settings - Configuraciones a actualizar
+   * @returns {Promise<Object>} - Usuario actualizado
+   */
+  async updateSettings(userId, settings) {
+    try {
+      const {
+        // Security
+        twoFactorEnabled,
+        // Notifications
+        notificationEmail,
+        notificationSms,
+        notificationTransactions,
+        notificationWeeklyReports,
+        // Preferences
+        language,
+        currency,
+        darkMode,
+        soundEffects,
+        // Privacy
+        dataSharing,
+        analyticsEnabled,
+      } = settings;
+
+      const result = await query(
+        `UPDATE users SET
+          two_factor_enabled = COALESCE($2, two_factor_enabled),
+          notification_email = COALESCE($3, notification_email),
+          notification_sms = COALESCE($4, notification_sms),
+          notification_transactions = COALESCE($5, notification_transactions),
+          notification_weekly_reports = COALESCE($6, notification_weekly_reports),
+          language = COALESCE($7, language),
+          currency = COALESCE($8, currency),
+          dark_mode = COALESCE($9, dark_mode),
+          sound_effects = COALESCE($10, sound_effects),
+          data_sharing = COALESCE($11, data_sharing),
+          analytics_enabled = COALESCE($12, analytics_enabled),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1
+        RETURNING *`,
+        [
+          userId,
+          twoFactorEnabled,
+          notificationEmail,
+          notificationSms,
+          notificationTransactions,
+          notificationWeeklyReports,
+          language,
+          currency,
+          darkMode,
+          soundEffects,
+          dataSharing,
+          analyticsEnabled,
+        ]
+      );
+
+      Logger.success(`✅ Settings actualizados para usuario: ${userId}`);
+      return result.rows[0];
+    } catch (error) {
+      Logger.error('Error al actualizar settings de usuario', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza la contraseña de un usuario
+   * @param {string} userId - UUID del usuario
+   * @param {string} passwordHash - Hash de la nueva contraseña
+   * @returns {Promise<boolean>} - True si se actualizó correctamente
+   */
+  async updatePassword(userId, passwordHash) {
+    try {
+      await query(
+        `UPDATE users SET
+          password_hash = $2,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1`,
+        [userId, passwordHash]
+      );
+
+      Logger.success(`✅ Contraseña actualizada para usuario: ${userId}`);
+      return true;
+    } catch (error) {
+      Logger.error('Error al actualizar contraseña', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina permanentemente un usuario y todos sus datos
+   * @param {string} userId - UUID del usuario
+   * @returns {Promise<boolean>} - True si se eliminó correctamente
+   */
+  async deleteUser(userId) {
+    try {
+      // CASCADE will delete all related data (accounts, transactions, etc.)
+      await query(`DELETE FROM users WHERE user_id = $1`, [userId]);
+
+      Logger.warning(`⚠️ Usuario eliminado permanentemente: ${userId}`);
+      return true;
+    } catch (error) {
+      Logger.error('Error al eliminar usuario', error);
+      throw error;
+    }
+  }
+
+  /**
    * Obtiene el resumen financiero de un usuario
    * @param {string} userId - UUID del usuario
    * @returns {Promise<Object>} - Resumen financiero
