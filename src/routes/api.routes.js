@@ -67,6 +67,7 @@ router.delete('/transactions/:id', ApiController.deleteTransaction.bind(ApiContr
 // Accounts
 router.get('/accounts', ApiController.getAccounts.bind(ApiController));
 router.post('/accounts', ApiController.createAccount.bind(ApiController));
+router.delete('/accounts/:id', ApiController.deleteAccountById.bind(ApiController));
 
 // Categories
 router.get('/categories', ApiController.getCategories.bind(ApiController));
@@ -76,6 +77,15 @@ router.get('/goals', ApiController.getGoals.bind(ApiController));
 router.post('/goals', ApiController.createGoal.bind(ApiController));
 router.put('/goals/:id', ApiController.updateGoal.bind(ApiController));
 router.post('/goals/:id/deposit', ApiController.depositToGoal.bind(ApiController));
+
+// Credit Card Purchases (Compras a Cuotas)
+router.get('/credit-purchases', ApiController.getCreditPurchases.bind(ApiController));
+router.post('/credit-purchases', ApiController.createCreditPurchase.bind(ApiController));
+router.post('/credit-purchases/:id/payment', ApiController.recordPurchasePayment.bind(ApiController));
+
+// Subscriptions
+router.get('/subscriptions/current', ApiController.getCurrentSubscription.bind(ApiController));
+router.post('/subscriptions', ApiController.createSubscription.bind(ApiController));
 
 // Chatbot Web
 router.post('/chatbot/message', ApiController.sendChatMessage.bind(ApiController));

@@ -1138,6 +1138,70 @@ class ApiController {
         }
     }
 
+    /**
+     * DELETE /api/v1/accounts/:id
+     * Delete an account and all its transactions
+     */
+    async deleteAccountById(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+            const { query: dbQuery } = require('../config/database');
+
+            // Verify account belongs to user
+            const accountResult = await dbQuery(
+                `SELECT * FROM accounts WHERE account_id = $1 AND user_id = $2`,
+                [id, user.user_id]
+            );
+
+            if (accountResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Cuenta no encontrada'
+                });
+            }
+
+            const account = accountResult.rows[0];
+
+            // Delete associated credit card purchases if any
+            await dbQuery(
+                `DELETE FROM credit_purchase_payments WHERE purchase_id IN 
+                 (SELECT purchase_id FROM credit_card_purchases WHERE account_id = $1)`,
+                [id]
+            );
+            await dbQuery(
+                `DELETE FROM credit_card_purchases WHERE account_id = $1`,
+                [id]
+            );
+
+            // Delete all transactions for this account
+            await dbQuery(
+                `DELETE FROM transactions WHERE account_id = $1`,
+                [id]
+            );
+
+            // Delete the account
+            await dbQuery(
+                `DELETE FROM accounts WHERE account_id = $1`,
+                [id]
+            );
+
+            Logger.info(`🗑️ Account ${id} (${account.name}) deleted for user ${user.user_id}`);
+
+            return res.status(200).json({
+                success: true,
+                message: `Cuenta "${account.name}" eliminada junto con todas sus transacciones`
+            });
+
+        } catch (error) {
+            Logger.error('Error en deleteAccountById', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al eliminar la cuenta'
+            });
+        }
+    }
+
     // ==========================================
     // CATEGORY ENDPOINTS
     // ==========================================
@@ -1654,6 +1718,380 @@ class ApiController {
             return res.status(500).json({
                 success: false,
                 error: 'Error interno al intentar seed'
+            });
+        }
+    }
+
+    // ==========================================
+    // CREDIT CARD PURCHASES ENDPOINTS
+    // ==========================================
+
+    /**
+     * GET /api/v1/credit-purchases
+     * Get all credit card purchases for the user
+     */
+    async getCreditPurchases(req, res) {
+        try {
+            const user = req.user;
+            const { status = 'active', accountId } = req.query;
+
+            const { query: dbQuery } = require('../config/database');
+
+            let sql = `
+                SELECT 
+                    p.*,
+                    a.name as account_name,
+                    a.bank_name
+                FROM credit_card_purchases p
+                JOIN accounts a ON p.account_id = a.account_id
+                WHERE p.user_id = $1
+            `;
+            const params = [user.user_id];
+
+            if (status && status !== 'all') {
+                params.push(status);
+                sql += ` AND p.status = $${params.length}`;
+            }
+
+            if (accountId) {
+                params.push(accountId);
+                sql += ` AND p.account_id = $${params.length}`;
+            }
+
+            sql += ' ORDER BY p.purchase_date DESC';
+
+            const result = await dbQuery(sql, params);
+
+            const purchases = result.rows.map(p => ({
+                id: p.purchase_id,
+                accountId: p.account_id,
+                accountName: p.account_name,
+                bankName: p.bank_name,
+                description: p.description,
+                totalAmount: parseFloat(p.total_amount),
+                installments: p.installments,
+                installmentAmount: parseFloat(p.installment_amount),
+                paidInstallments: p.paid_installments,
+                remainingInstallments: p.installments - p.paid_installments,
+                remainingAmount: parseFloat(p.remaining_amount),
+                totalPaid: parseFloat(p.total_paid || 0),
+                purchaseDate: p.purchase_date,
+                status: p.status,
+                progressPercent: Math.round((p.paid_installments / p.installments) * 100)
+            }));
+
+            return res.status(200).json({
+                success: true,
+                purchases
+            });
+
+        } catch (error) {
+            Logger.error('Error en getCreditPurchases', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener compras a cuotas'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/credit-purchases
+     * Create a new credit card purchase with installments
+     */
+    async createCreditPurchase(req, res) {
+        try {
+            const user = req.user;
+            const { accountId, description, totalAmount, installments, firstPaymentDate } = req.body;
+
+            // Validate required fields
+            if (!accountId || !description || !totalAmount || !installments) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Faltan campos requeridos: accountId, description, totalAmount, installments'
+                });
+            }
+
+            // Validate installments range
+            if (installments < 1 || installments > 48) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El número de cuotas debe estar entre 1 y 48'
+                });
+            }
+
+            // Verify account exists and is a credit card
+            const { query: dbQuery } = require('../config/database');
+
+            const accountResult = await dbQuery(
+                `SELECT * FROM accounts WHERE account_id = $1 AND user_id = $2 AND type = 'credit_card'`,
+                [accountId, user.user_id]
+            );
+
+            if (accountResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Tarjeta de crédito no encontrada'
+                });
+            }
+
+            // Calculate installment amount
+            const installmentAmount = Math.ceil(totalAmount / installments);
+
+            // Create purchase
+            const result = await dbQuery(
+                `INSERT INTO credit_card_purchases 
+                (user_id, account_id, description, total_amount, installments, installment_amount, remaining_amount, first_payment_date)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING *`,
+                [user.user_id, accountId, description, totalAmount, installments, installmentAmount, totalAmount, firstPaymentDate || null]
+            );
+
+            const purchase = result.rows[0];
+
+            Logger.info(`💳 Nueva compra a cuotas: ${description} - ${installments} cuotas de $${installmentAmount.toLocaleString()}`);
+
+            return res.status(201).json({
+                success: true,
+                purchase: {
+                    id: purchase.purchase_id,
+                    description: purchase.description,
+                    totalAmount: parseFloat(purchase.total_amount),
+                    installments: purchase.installments,
+                    installmentAmount: parseFloat(purchase.installment_amount),
+                    remainingAmount: parseFloat(purchase.remaining_amount),
+                    status: purchase.status
+                },
+                message: `Compra registrada: ${installments} cuotas de $${installmentAmount.toLocaleString('es-CO')}`
+            });
+
+        } catch (error) {
+            Logger.error('Error en createCreditPurchase', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al registrar la compra'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/credit-purchases/:id/payment
+     * Record a payment towards a credit card purchase
+     */
+    async recordPurchasePayment(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+            const { amount, notes } = req.body;
+
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El monto del pago debe ser mayor a 0'
+                });
+            }
+
+            const { query: dbQuery } = require('../config/database');
+
+            // Get purchase
+            const purchaseResult = await dbQuery(
+                `SELECT * FROM credit_card_purchases WHERE purchase_id = $1 AND user_id = $2`,
+                [id, user.user_id]
+            );
+
+            if (purchaseResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Compra no encontrada'
+                });
+            }
+
+            const purchase = purchaseResult.rows[0];
+
+            if (purchase.status === 'paid_off') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Esta compra ya está pagada'
+                });
+            }
+
+            // Insert payment record
+            await dbQuery(
+                `INSERT INTO credit_purchase_payments (purchase_id, user_id, amount, notes)
+                 VALUES ($1, $2, $3, $4)`,
+                [id, user.user_id, amount, notes || null]
+            );
+
+            // Calculate new values
+            const newRemainingAmount = Math.max(0, parseFloat(purchase.remaining_amount) - amount);
+            const newTotalPaid = parseFloat(purchase.total_paid || 0) + amount;
+
+            // Estimate paid installments based on total paid
+            const installmentAmount = parseFloat(purchase.installment_amount);
+            const newPaidInstallments = Math.min(purchase.installments, Math.floor(newTotalPaid / installmentAmount));
+
+            // Determine new status
+            const newStatus = newRemainingAmount <= 0 ? 'paid_off' : 'active';
+
+            // Update purchase
+            await dbQuery(
+                `UPDATE credit_card_purchases 
+                 SET remaining_amount = $1, 
+                     total_paid = $2,
+                     paid_installments = $3, 
+                     status = $4,
+                     last_payment_date = CURRENT_DATE
+                 WHERE purchase_id = $5`,
+                [newRemainingAmount, newTotalPaid, newPaidInstallments, newStatus, id]
+            );
+
+            Logger.info(`💰 Pago registrado: $${amount.toLocaleString()} para "${purchase.description}"`);
+
+            return res.status(200).json({
+                success: true,
+                message: newStatus === 'paid_off'
+                    ? '¡Felicidades! Has terminado de pagar esta compra 🎉'
+                    : `Pago de $${amount.toLocaleString('es-CO')} registrado`,
+                purchase: {
+                    id: purchase.purchase_id,
+                    description: purchase.description,
+                    remainingAmount: newRemainingAmount,
+                    totalPaid: newTotalPaid,
+                    paidInstallments: newPaidInstallments,
+                    remainingInstallments: purchase.installments - newPaidInstallments,
+                    status: newStatus
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en recordPurchasePayment', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al registrar el pago'
+            });
+        }
+    }
+
+    // ==========================================
+    // SUBSCRIPTION ENDPOINTS
+    // ==========================================
+
+    /**
+     * GET /api/v1/subscriptions/current
+     * Get user's current active subscription
+     */
+    async getCurrentSubscription(req, res) {
+        try {
+            const user = req.user;
+            const { query: dbQuery } = require('../config/database');
+
+            const result = await dbQuery(
+                `SELECT * FROM subscriptions 
+                 WHERE user_id = $1 
+                 AND status = 'active' 
+                 AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [user.user_id]
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    subscription: null,
+                    hasSubscription: false
+                });
+            }
+
+            const sub = result.rows[0];
+            return res.status(200).json({
+                success: true,
+                hasSubscription: true,
+                subscription: {
+                    id: sub.id,
+                    planType: sub.plan_type,
+                    status: sub.status,
+                    startedAt: sub.started_at,
+                    expiresAt: sub.expires_at,
+                    amountPaid: sub.amount_paid ? parseFloat(sub.amount_paid) : null,
+                    currency: sub.currency
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en getCurrentSubscription', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener suscripción'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/subscriptions
+     * Create a new subscription (after payment)
+     */
+    async createSubscription(req, res) {
+        try {
+            const user = req.user;
+            const { planType, paymentReference, amountPaid, currency = 'COP' } = req.body;
+            const { query: dbQuery } = require('../config/database');
+
+            const validPlans = ['basico', 'premium', 'empresas'];
+            if (!planType || !validPlans.includes(planType)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Plan inválido. Opciones: basico, premium, empresas'
+                });
+            }
+
+            // Check for existing active subscription
+            const existing = await dbQuery(
+                `SELECT id FROM subscriptions 
+                 WHERE user_id = $1 AND status = 'active'`,
+                [user.user_id]
+            );
+
+            if (existing.rows.length > 0) {
+                // Update existing subscription to cancelled
+                await dbQuery(
+                    `UPDATE subscriptions SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP 
+                     WHERE id = $1`,
+                    [existing.rows[0].id]
+                );
+            }
+
+            // Calculate expiration (30 days from now for monthly plans)
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 30);
+
+            const result = await dbQuery(
+                `INSERT INTO subscriptions 
+                 (user_id, plan_type, status, payment_reference, amount_paid, currency, expires_at)
+                 VALUES ($1, $2, 'active', $3, $4, $5, $6)
+                 RETURNING *`,
+                [user.user_id, planType, paymentReference || null, amountPaid || null, currency, expiresAt]
+            );
+
+            const sub = result.rows[0];
+            Logger.info(`💳 Nueva suscripción: ${planType} para usuario ${user.user_id}`);
+
+            return res.status(201).json({
+                success: true,
+                message: `Suscripción ${planType} activada correctamente`,
+                subscription: {
+                    id: sub.id,
+                    planType: sub.plan_type,
+                    status: sub.status,
+                    startedAt: sub.started_at,
+                    expiresAt: sub.expires_at
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en createSubscription', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al crear suscripción'
             });
         }
     }
