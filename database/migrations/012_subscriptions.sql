@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS subscriptions (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     plan_type VARCHAR(20) NOT NULL CHECK (plan_type IN ('basico', 'premium', 'empresas')),
     status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'cancelled', 'expired')),
     started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 
 -- Add subscription check function
-CREATE OR REPLACE FUNCTION check_user_subscription(p_user_id INTEGER)
+CREATE OR REPLACE FUNCTION check_user_subscription(p_user_id UUID)
 RETURNS TABLE(has_subscription BOOLEAN, plan_type VARCHAR, expires_at TIMESTAMP WITH TIME ZONE) AS $$
 BEGIN
     RETURN QUERY

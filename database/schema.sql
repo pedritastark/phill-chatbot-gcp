@@ -91,6 +91,8 @@ CREATE TABLE accounts (
     currency VARCHAR(10) DEFAULT 'COP', -- COP, USD, EUR
     credit_limit DECIMAL(12, 2), -- Para tarjetas de crédito
     interest_rate DECIMAL(5, 2), -- Tasa de interés
+    statement_day INTEGER, -- Día de corte (1-28)
+    due_day INTEGER, -- Día de pago (1-28)
     
     -- Metadata
     account_number_last4 VARCHAR(4), -- Últimos 4 dígitos (por seguridad)
@@ -105,7 +107,9 @@ CREATE TABLE accounts (
     
     -- Constraints
     CONSTRAINT chk_account_type CHECK (type IN ('savings', 'checking', 'credit_card', 'cash', 'investment')),
-    CONSTRAINT chk_credit_limit CHECK (credit_limit IS NULL OR credit_limit >= 0)
+    CONSTRAINT chk_credit_limit CHECK (credit_limit IS NULL OR credit_limit >= 0),
+    CONSTRAINT chk_statement_day CHECK (statement_day IS NULL OR (statement_day BETWEEN 1 AND 28)),
+    CONSTRAINT chk_due_day CHECK (due_day IS NULL OR (due_day BETWEEN 1 AND 28))
 );
 
 -- Índices
@@ -573,7 +577,13 @@ CREATE TABLE reminders (
     
     -- Contenido
     message TEXT NOT NULL,
-    
+    amount DECIMAL(12,2) DEFAULT 0 NOT NULL,
+    currency VARCHAR(3) DEFAULT 'COP' NOT NULL,
+    account_name TEXT,
+    account_id UUID REFERENCES accounts(account_id) ON DELETE SET NULL,
+    transaction_type VARCHAR(15) DEFAULT 'expense',
+    completion_status VARCHAR(20) DEFAULT 'pending',
+
     -- Programación
     scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
     is_recurring BOOLEAN DEFAULT FALSE,
@@ -582,13 +592,17 @@ CREATE TABLE reminders (
     -- Estado
     status VARCHAR(20) DEFAULT 'pending', -- pending, sent, failed, cancelled
     sent_at TIMESTAMP WITH TIME ZONE,
-    
+    completed_at TIMESTAMP WITH TIME ZONE,
+    linked_transaction_id UUID REFERENCES transactions(transaction_id) ON DELETE SET NULL,
+
     -- Auditoría
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     -- Constraints
-    CONSTRAINT chk_reminder_status CHECK (status IN ('pending', 'sent', 'failed', 'cancelled'))
+    CONSTRAINT chk_reminder_status CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
+    CONSTRAINT chk_reminder_transaction_type CHECK (transaction_type IN ('expense', 'income')),
+    CONSTRAINT chk_reminder_completion_status CHECK (completion_status IN ('pending', 'completed'))
 );
 
 -- Índices
@@ -602,4 +616,3 @@ CREATE TRIGGER update_reminders_updated_at BEFORE UPDATE ON reminders
 -- ============================================
 -- FIN DEL SCHEMA
 -- ============================================
-

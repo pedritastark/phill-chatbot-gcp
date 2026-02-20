@@ -103,7 +103,14 @@ class ReminderScheduler {
                     message: reminder.message,
                     scheduledAt: nextDate.toISOString(),
                     isRecurring: true,
-                    recurrencePattern: reminder.recurrence_pattern
+                    recurrencePattern: reminder.recurrence_pattern,
+                    amount: reminder.amount,
+                    currency: reminder.currency,
+                    accountName: reminder.account_name,
+                    accountId: reminder.account_id,
+                    transactionType: reminder.transaction_type,
+                    completionStatus: 'pending',
+                    status: 'pending'
                 });
 
                 Logger.info(`🔄 Recordatorio recurrente reprogramado para: ${nextDate.toISOString()}`);

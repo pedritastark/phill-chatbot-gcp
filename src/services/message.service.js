@@ -478,7 +478,8 @@ class MessageService {
         amount,
         description,
         category,
-        targetAccount ? targetAccount.name : null // Nuevo parámetro
+        targetAccount ? targetAccount.name : null, // Nuevo parámetro
+        targetAccount ? targetAccount.account_id : null
       );
 
       Logger.finance(`Transacción registrada: ${type} - $${amount}`);
@@ -589,10 +590,10 @@ class MessageService {
       }
 
       // Registrar salida
-      await FinanceService.createTransaction(userId, 'expense', amount, `Transferencia a ${toAcc.name}`, 'Transferencia Saliente', fromAcc.name);
+      await FinanceService.createTransaction(userId, 'expense', amount, `Transferencia a ${toAcc.name}`, 'Transferencia Saliente', fromAcc.name, fromAcc.account_id);
 
       // Registrar entrada
-      await FinanceService.createTransaction(userId, 'income', amount, `Transferencia de ${fromAcc.name}`, 'Transferencia Entrante', toAcc.name);
+      await FinanceService.createTransaction(userId, 'income', amount, `Transferencia de ${fromAcc.name}`, 'Transferencia Entrante', toAcc.name, toAcc.account_id);
 
       return `🔄 ¡Listo! Transferí ${formatCurrency(amount)} de ${fromAcc.name} a ${toAcc.name}. 💜`;
 
@@ -636,7 +637,8 @@ class MessageService {
         amount,
         'Ajuste de Saldo Manual',
         'Ajuste',
-        targetAccount.name
+        targetAccount.name,
+        targetAccount.account_id
       );
 
       return `✅ He ajustado el saldo de ${targetAccount.name}. Ahora es ${formatCurrency(new_balance)}. 💜`;
@@ -707,7 +709,8 @@ class MessageService {
             initial_balance,
             `Transferencia inicial a ${account_name}`,
             'Transferencia Saliente',
-            sourceAccount.name
+            sourceAccount.name,
+            sourceAccount.account_id
           );
 
           message += `\n\nHe transferido ${formatCurrency(initial_balance)} desde ${sourceAccount.name} para fondearla.`;

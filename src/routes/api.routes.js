@@ -64,6 +64,11 @@ router.post('/transactions', ApiController.createTransaction.bind(ApiController)
 router.put('/transactions/:id', ApiController.updateTransaction.bind(ApiController));
 router.delete('/transactions/:id', ApiController.deleteTransaction.bind(ApiController));
 
+// Reminders
+router.get('/reminders', ApiController.getReminders.bind(ApiController));
+router.post('/reminders', ApiController.createReminder.bind(ApiController));
+router.patch('/reminders/:id/complete', ApiController.completeReminder.bind(ApiController));
+
 // Accounts
 router.get('/accounts', ApiController.getAccounts.bind(ApiController));
 router.post('/accounts', ApiController.createAccount.bind(ApiController));
@@ -82,6 +87,7 @@ router.post('/goals/:id/deposit', ApiController.depositToGoal.bind(ApiController
 router.get('/credit-purchases', ApiController.getCreditPurchases.bind(ApiController));
 router.post('/credit-purchases', ApiController.createCreditPurchase.bind(ApiController));
 router.post('/credit-purchases/:id/payment', ApiController.recordPurchasePayment.bind(ApiController));
+router.post('/credit-purchases/payments', ApiController.recordCardPayment.bind(ApiController));
 
 // Subscriptions
 router.get('/subscriptions/current', ApiController.getCurrentSubscription.bind(ApiController));

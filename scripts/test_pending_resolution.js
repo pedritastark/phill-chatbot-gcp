@@ -26,6 +26,7 @@ async function testResolution() {
             // Si el user dice "Ya pagué la deuda futura", debería hacer match.
             'Entretenimiento',
             null,
+            null,
             'USD',
             'completed'
         );

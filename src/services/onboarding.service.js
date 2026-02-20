@@ -610,7 +610,8 @@ class OnboardingService {
             transaction.amount,
             transaction.description,
             category,
-            target.name
+            target.name,
+            target.account_id
         );
 
 

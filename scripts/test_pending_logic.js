@@ -29,6 +29,7 @@ async function runTest() {
             'Test de Deuda Futura',
             'Pruebas',
             null,
+            null,
             'USD',
             'pending'
         );

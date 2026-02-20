@@ -35,7 +35,7 @@ class FinanceService {
    * @param {string} status - Estado (opcional, default 'completed')
    * @returns {Promise<Object>}
    */
-  async createTransaction(userId, type, amount, description, categoryName = null, accountName = null, currency = 'COP', status = 'completed') {
+  async createTransaction(userId, type, amount, description, categoryName = null, accountName = null, accountId = null, currency = 'COP', status = 'completed') {
     try {
       const user = await UserDBService.findOrCreate({ phoneNumber: userId });
 
@@ -105,31 +105,48 @@ class FinanceService {
 
       // 3. Determinar la cuenta
       let account = null;
-      if (accountName) {
-        // Buscar cuenta específica
+
+      if (accountId) {
+        const candidate = await AccountDBService.findById(accountId);
+        if (candidate && candidate.user_id === user.user_id) {
+          account = candidate;
+        }
+      }
+
+      if (!account && accountName) {
         const accounts = await AccountDBService.findByUser(user.user_id);
         const matchingAccounts = accounts.filter(a => a.name.toLowerCase().includes(accountName.toLowerCase()));
 
         if (matchingAccounts.length > 0) {
-          // Si es un gasto, priorizar cuenta con saldo suficiente
           if (type === 'expense') {
             account = matchingAccounts.find(a => parseFloat(a.balance) >= amount);
           }
 
-          // Si no se encontró cuenta con saldo (o es ingreso), usar la primera que coincida
           if (!account) {
             account = matchingAccounts[0];
           }
         }
 
-        // Si no se encuentra, usar default pero loguear warning
         if (!account) {
           Logger.warning(`Cuenta "${accountName}" no encontrada para ${userId}, usando default.`);
           account = await AccountDBService.getDefaultAccount(user.user_id);
         }
-      } else {
-        // Usar cuenta predeterminada
+      }
+
+      if (!account) {
         account = await AccountDBService.getDefaultAccount(user.user_id);
+      }
+
+      if (account && account.type === 'credit_card' && type === 'expense') {
+        const limit = new Decimal(account.credit_limit || 0);
+        const used = new Decimal(account.balance || 0);
+        const projected = used.plus(amount);
+
+        if (limit.gt(0) && projected.gt(limit)) {
+          const err = new Error('Cupo insuficiente en la tarjeta de crédito.');
+          err.code = 'CREDIT_LIMIT_EXCEEDED';
+          throw err;
+        }
       }
 
       // 4. Crear la transacción
@@ -482,6 +499,7 @@ async function test() {
       12.50,
       'Netflix Mensual',
       'Suscripciones',
+      null,
       null,
       'USD',
       'pending'

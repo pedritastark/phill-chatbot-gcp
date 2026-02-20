@@ -109,6 +109,8 @@ class AccountDBService {
         balance,
         creditLimit,
         interestRate,
+        statementDay,
+        dueDay,
         accountNumberLast4,
         color,
         icon,
@@ -124,13 +126,15 @@ class AccountDBService {
           balance,
           credit_limit,
           interest_rate,
+          statement_day,
+          due_day,
           account_number_last4,
           color,
           icon,
           is_default,
           category,
           currency
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *`,
         [
           userId,
@@ -140,6 +144,8 @@ class AccountDBService {
           balance || 0,
           creditLimit || null,
           interestRate || null,
+          statementDay || null,
+          dueDay || null,
           accountNumberLast4 || null,
           color || '#6366f1',
           icon || 'bank',
@@ -171,6 +177,8 @@ class AccountDBService {
         balance,
         creditLimit,
         interestRate,
+        statementDay,
+        dueDay,
         accountNumberLast4,
         color,
         icon,
@@ -184,11 +192,13 @@ class AccountDBService {
           balance = COALESCE($4, balance),
           credit_limit = COALESCE($5, credit_limit),
           interest_rate = COALESCE($6, interest_rate),
-          account_number_last4 = COALESCE($7, account_number_last4),
-          color = COALESCE($8, color),
-          icon = COALESCE($9, icon),
-          is_default = COALESCE($10, is_default),
-          category = COALESCE($11, category),
+          statement_day = COALESCE($7, statement_day),
+          due_day = COALESCE($8, due_day),
+          account_number_last4 = COALESCE($9, account_number_last4),
+          color = COALESCE($10, color),
+          icon = COALESCE($11, icon),
+          is_default = COALESCE($12, is_default),
+          category = COALESCE($13, category),
           updated_at = CURRENT_TIMESTAMP
          WHERE account_id = $1 AND is_active = true
          RETURNING *`,
@@ -199,6 +209,8 @@ class AccountDBService {
           balance,
           creditLimit,
           interestRate,
+          statementDay,
+          dueDay,
           accountNumberLast4,
           color,
           icon,
@@ -400,4 +412,3 @@ class AccountDBService {
 }
 
 module.exports = new AccountDBService();
-

@@ -3,7 +3,8 @@ const {
     AuthDBService,
     TransactionDBService,
     AccountDBService,
-    CategoryDBService
+    CategoryDBService,
+    ReminderDBService
 } = require('../services/db');
 const FinanceService = require('../services/finance.service');
 const WhatsAppService = require('../services/whatsapp.service');
@@ -936,6 +937,7 @@ class ApiController {
                 description,
                 resolvedCategory || null,
                 resolvedAccountName || null,
+                accountId || null,
                 currency,
                 status
             );
@@ -956,6 +958,12 @@ class ApiController {
             });
 
         } catch (error) {
+            if (error.code === 'CREDIT_LIMIT_EXCEEDED') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cupo insuficiente en la tarjeta de crédito'
+                });
+            }
             Logger.error('Error en createTransaction', error);
             return res.status(500).json({
                 success: false,
@@ -1037,6 +1045,189 @@ class ApiController {
         }
     }
 
+    /**
+     * GET /api/v1/reminders
+     */
+    async getReminders(req, res) {
+        try {
+            const user = req.user;
+            const reminders = await ReminderDBService.getByUser(user.user_id);
+            return res.status(200).json({ success: true, reminders });
+        } catch (error) {
+            Logger.error('Error en getReminders', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener recordatorios'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/reminders
+     */
+    async createReminder(req, res) {
+        try {
+            const user = req.user;
+            const {
+                message,
+                scheduledAt,
+                amount = 0,
+                currency = 'COP',
+                accountId,
+                accountName,
+                transactionType = 'expense',
+                isRecurring = false,
+                recurrencePattern = null
+            } = req.body;
+
+            if (!message || !scheduledAt) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Mensaje y fecha son requeridos'
+                });
+            }
+
+            const reminder = await ReminderDBService.createReminder({
+                userId: user.user_id,
+                message,
+                scheduledAt,
+                isRecurring: !!isRecurring,
+                recurrencePattern: recurrencePattern || null,
+                amount: parseFloat(amount) || 0,
+                currency: currency || 'COP',
+                accountId: accountId || null,
+                accountName: accountName || null,
+                transactionType: transactionType || 'expense',
+                completionStatus: 'pending',
+                status: 'pending'
+            });
+
+            return res.status(201).json({ success: true, reminder });
+        } catch (error) {
+            Logger.error('Error en createReminder', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al crear recordatorio'
+            });
+        }
+    }
+
+    /**
+     * PATCH /api/v1/reminders/:id/complete
+     */
+    async completeReminder(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+            const { mark = 'completed', accountId } = req.body;
+
+            const reminder = await ReminderDBService.getById(id);
+            if (!reminder || reminder.user_id !== user.user_id) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Recordatorio no encontrado'
+                });
+            }
+
+            if (mark === 'completed') {
+                if (reminder.completion_status === 'completed') {
+                    return res.status(200).json({ success: true, reminder });
+                }
+
+                const amount = parseFloat(reminder.amount);
+                if (!amount || amount <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'El recordatorio no tiene un monto válido'
+                    });
+                }
+
+                let account = null;
+                const preferredAccountId = accountId || reminder.account_id;
+
+                if (preferredAccountId) {
+                    const candidate = await AccountDBService.findById(preferredAccountId);
+                    if (candidate && candidate.user_id === user.user_id) {
+                        account = candidate;
+                    }
+                }
+
+                if (!account) {
+                    account = await AccountDBService.getDefaultAccount(user.user_id);
+                }
+
+                const transaction = await FinanceService.createTransaction(
+                    user.phone_number,
+                    reminder.transaction_type || 'expense',
+                    amount,
+                    `Recordatorio: ${reminder.message}`,
+                    null,
+                    account ? account.name : reminder.account_name || null,
+                    account ? account.account_id : null,
+                    reminder.currency || 'COP',
+                    'completed'
+                );
+
+                const updatedReminder = await ReminderDBService.updateReminder(id, {
+                    completion_status: 'completed',
+                    completed_at: new Date(),
+                    linked_transaction_id: transaction.transaction_id,
+                    account_id: account ? account.account_id : reminder.account_id,
+                    account_name: account ? account.name : reminder.account_name,
+                    status: 'sent'
+                });
+
+                return res.status(200).json({
+                    success: true,
+                    reminder: updatedReminder,
+                    transaction
+                });
+            }
+
+            if (reminder.completion_status === 'completed' && reminder.linked_transaction_id) {
+                const linkedTransaction = await TransactionDBService.findById(reminder.linked_transaction_id);
+                if (linkedTransaction && linkedTransaction.user_id === user.user_id) {
+                    if (linkedTransaction.account_id) {
+                        const account = await AccountDBService.findById(linkedTransaction.account_id);
+                        if (account && account.user_id === user.user_id) {
+                            const isLiability = ['credit_card', 'loan', 'debt'].includes(account.type);
+                            let operation = 'add';
+                            if (isLiability) {
+                                operation = linkedTransaction.type === 'expense' ? 'subtract' : 'add';
+                            } else {
+                                operation = linkedTransaction.type === 'expense' ? 'add' : 'subtract';
+                            }
+                            await AccountDBService.updateBalance(account.account_id, linkedTransaction.amount, operation);
+                        }
+                    }
+
+                    await FinanceService.deleteTransaction(linkedTransaction.transaction_id);
+                }
+            }
+
+            const reverted = await ReminderDBService.updateReminder(id, {
+                completion_status: 'pending',
+                completed_at: null,
+                linked_transaction_id: null,
+                status: 'pending'
+            });
+
+            return res.status(200).json({ success: true, reminder: reverted });
+        } catch (error) {
+            if (error.code === 'CREDIT_LIMIT_EXCEEDED') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cupo insuficiente en la tarjeta de crédito'
+                });
+            }
+            Logger.error('Error en completeReminder', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al actualizar recordatorio'
+            });
+        }
+    }
+
     // ==========================================
     // ACCOUNT ENDPOINTS
     // ==========================================
@@ -1051,20 +1242,35 @@ class ApiController {
 
             const accounts = await AccountDBService.findByUser(user.user_id);
 
-            const formattedAccounts = accounts.map(a => ({
-                id: a.account_id,
-                name: a.name,
-                type: a.type,
-                category: a.category,
-                bankName: a.bank_name,
-                balance: parseFloat(a.balance),
-                currency: a.currency || 'COP',
-                creditLimit: a.credit_limit ? parseFloat(a.credit_limit) : null,
-                color: a.color,
-                icon: a.icon,
-                isDefault: a.is_default,
-                last4: a.account_number_last4
-            }));
+            const formattedAccounts = accounts.map(a => {
+                const balance = parseFloat(a.balance);
+                const interestRate = a.interest_rate ? parseFloat(a.interest_rate) : null;
+                const isCreditCard = a.type === 'credit_card';
+                const minimumPayment = isCreditCard ? Math.max(balance * 0.05, 0) : null;
+                const monthlyInterest = isCreditCard && interestRate
+                    ? (balance * (interestRate / 100) / 12)
+                    : null;
+
+                return {
+                    id: a.account_id,
+                    name: a.name,
+                    type: a.type,
+                    category: a.category,
+                    bankName: a.bank_name,
+                    balance,
+                    currency: a.currency || 'COP',
+                    creditLimit: a.credit_limit ? parseFloat(a.credit_limit) : null,
+                    interestRate,
+                    statementDay: a.statement_day,
+                    dueDay: a.due_day,
+                    minimumPayment,
+                    monthlyInterest,
+                    color: a.color,
+                    icon: a.icon,
+                    isDefault: a.is_default,
+                    last4: a.account_number_last4
+                };
+            });
 
             // Calculate total balance
             const totalBalance = formattedAccounts.reduce((sum, acc) => {
@@ -1097,7 +1303,7 @@ class ApiController {
     async createAccount(req, res) {
         try {
             const user = req.user;
-            const { name, type, bankName, balance = 0, color, icon, creditLimit } = req.body;
+            const { name, type, bankName, balance = 0, color, icon, creditLimit, statementDay, dueDay, interestRate } = req.body;
 
             if (!name || !type) {
                 return res.status(400).json({
@@ -1114,8 +1320,50 @@ class ApiController {
                 balance: parseFloat(balance),
                 color,
                 icon,
-                creditLimit: creditLimit ? parseFloat(creditLimit) : null
+                creditLimit: creditLimit ? parseFloat(creditLimit) : null,
+                interestRate: interestRate ? parseFloat(interestRate) : null,
+                statementDay: statementDay ? parseInt(statementDay) : null,
+                dueDay: dueDay ? parseInt(dueDay) : null
             });
+
+            if (type === 'credit_card') {
+                const reminders = [];
+                const statement = statementDay ? parseInt(statementDay) : null;
+                const due = dueDay ? parseInt(dueDay) : null;
+
+                const buildNextDate = (day) => {
+                    const now = new Date();
+                    const candidate = new Date(now.getFullYear(), now.getMonth(), day, 9, 0, 0);
+                    if (candidate < now) {
+                        return new Date(now.getFullYear(), now.getMonth() + 1, day, 9, 0, 0);
+                    }
+                    return candidate;
+                };
+
+                if (statement && statement >= 1 && statement <= 28) {
+                    reminders.push({
+                        userId: user.user_id,
+                        message: `Corte de tarjeta ${name}`,
+                        scheduledAt: buildNextDate(statement).toISOString(),
+                        isRecurring: true,
+                        recurrencePattern: 'monthly'
+                    });
+                }
+
+                if (due && due >= 1 && due <= 28) {
+                    reminders.push({
+                        userId: user.user_id,
+                        message: `Pago de tarjeta ${name}`,
+                        scheduledAt: buildNextDate(due).toISOString(),
+                        isRecurring: true,
+                        recurrencePattern: 'monthly'
+                    });
+                }
+
+                for (const reminderData of reminders) {
+                    await ReminderDBService.createReminder(reminderData);
+                }
+            }
 
             return res.status(201).json({
                 success: true,
@@ -1834,6 +2082,16 @@ class ApiController {
                 });
             }
 
+            const account = accountResult.rows[0];
+            const limit = parseFloat(account.credit_limit || 0);
+            const used = parseFloat(account.balance || 0);
+            if (limit > 0 && (used + parseFloat(totalAmount)) > limit) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cupo insuficiente en la tarjeta de crédito'
+                });
+            }
+
             // Calculate installment amount
             const installmentAmount = Math.ceil(totalAmount / installments);
 
@@ -1847,6 +2105,24 @@ class ApiController {
             );
 
             const purchase = result.rows[0];
+
+            // Register expense transaction to increase credit card debt
+            const purchaseTransaction = await FinanceService.createTransaction(
+                user.phone_number,
+                'expense',
+                parseFloat(totalAmount),
+                `Compra a cuotas: ${description}`,
+                'Compras a Cuotas',
+                account.name,
+                account.account_id,
+                'COP',
+                'completed'
+            );
+
+            await dbQuery(
+                `UPDATE credit_card_purchases SET linked_transaction_id = $1 WHERE purchase_id = $2`,
+                [purchaseTransaction.transaction_id, purchase.purchase_id]
+            );
 
             Logger.info(`💳 Nueva compra a cuotas: ${description} - ${installments} cuotas de $${installmentAmount.toLocaleString()}`);
 
@@ -1914,13 +2190,6 @@ class ApiController {
                 });
             }
 
-            // Insert payment record
-            await dbQuery(
-                `INSERT INTO credit_purchase_payments (purchase_id, user_id, amount, notes)
-                 VALUES ($1, $2, $3, $4)`,
-                [id, user.user_id, amount, notes || null]
-            );
-
             // Calculate new values
             const newRemainingAmount = Math.max(0, parseFloat(purchase.remaining_amount) - amount);
             const newTotalPaid = parseFloat(purchase.total_paid || 0) + amount;
@@ -1944,6 +2213,25 @@ class ApiController {
                 [newRemainingAmount, newTotalPaid, newPaidInstallments, newStatus, id]
             );
 
+            // Register income transaction to reduce credit card debt
+            const paymentTransaction = await FinanceService.createTransaction(
+                user.phone_number,
+                'income',
+                parseFloat(amount),
+                `Pago cuota: ${purchase.description}`,
+                'Pago Tarjeta',
+                null,
+                purchase.account_id,
+                'COP',
+                'completed'
+            );
+
+            await dbQuery(
+                `INSERT INTO credit_purchase_payments (purchase_id, user_id, amount, notes, linked_transaction_id)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [id, user.user_id, amount, notes || null, paymentTransaction.transaction_id]
+            );
+
             Logger.info(`💰 Pago registrado: $${amount.toLocaleString()} para "${purchase.description}"`);
 
             return res.status(200).json({
@@ -1963,7 +2251,190 @@ class ApiController {
             });
 
         } catch (error) {
+            if (error.code === 'CREDIT_LIMIT_EXCEEDED') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cupo insuficiente en la tarjeta de crédito'
+                });
+            }
             Logger.error('Error en recordPurchasePayment', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al registrar el pago'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/credit-purchases/payments
+     * Record a payment across multiple purchases or as balance-only
+     */
+    async recordCardPayment(req, res) {
+        try {
+            const user = req.user;
+            const { accountId, amount, mode = 'auto', allocations = [], notes } = req.body;
+
+            if (!accountId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'accountId es requerido'
+                });
+            }
+
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El monto del pago debe ser mayor a 0'
+                });
+            }
+
+            const { query: dbQuery } = require('../config/database');
+
+            const accountResult = await dbQuery(
+                `SELECT * FROM accounts WHERE account_id = $1 AND user_id = $2 AND type = 'credit_card'`,
+                [accountId, user.user_id]
+            );
+
+            if (accountResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Tarjeta de crédito no encontrada'
+                });
+            }
+
+            const paymentTransaction = await FinanceService.createTransaction(
+                user.phone_number,
+                'income',
+                parseFloat(amount),
+                mode === 'balance_only' ? 'Pago a saldo de tarjeta' : 'Pago tarjeta (cuotas)',
+                'Pago Tarjeta',
+                null,
+                accountId,
+                'COP',
+                'completed'
+            );
+
+            if (mode === 'balance_only') {
+                return res.status(200).json({
+                    success: true,
+                    message: 'Pago aplicado al saldo de la tarjeta',
+                    transactionId: paymentTransaction.transaction_id
+                });
+            }
+
+            const purchaseResult = await dbQuery(
+                `SELECT * FROM credit_card_purchases
+                 WHERE user_id = $1 AND account_id = $2 AND status = 'active'
+                 ORDER BY purchase_date ASC`,
+                [user.user_id, accountId]
+            );
+
+            const purchases = purchaseResult.rows;
+            if (purchases.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No hay compras activas para esta tarjeta'
+                });
+            }
+
+            let remaining = parseFloat(amount);
+            let appliedTotal = 0;
+            const applied = [];
+
+            const applyPaymentToPurchase = async (purchase, payAmount) => {
+                if (payAmount <= 0) return;
+
+                const newRemainingAmount = Math.max(0, parseFloat(purchase.remaining_amount) - payAmount);
+                const newTotalPaid = parseFloat(purchase.total_paid || 0) + payAmount;
+                const installmentAmount = parseFloat(purchase.installment_amount);
+                const newPaidInstallments = Math.min(purchase.installments, Math.floor(newTotalPaid / installmentAmount));
+                const newStatus = newRemainingAmount <= 0 ? 'paid_off' : 'active';
+
+                await dbQuery(
+                    `UPDATE credit_card_purchases 
+                     SET remaining_amount = $1, 
+                         total_paid = $2,
+                         paid_installments = $3, 
+                         status = $4,
+                         last_payment_date = CURRENT_DATE
+                     WHERE purchase_id = $5`,
+                    [newRemainingAmount, newTotalPaid, newPaidInstallments, newStatus, purchase.purchase_id]
+                );
+
+                await dbQuery(
+                    `INSERT INTO credit_purchase_payments (purchase_id, user_id, amount, notes, linked_transaction_id)
+                     VALUES ($1, $2, $3, $4, $5)`,
+                    [purchase.purchase_id, user.user_id, payAmount, notes || null, paymentTransaction.transaction_id]
+                );
+
+                applied.push({
+                    purchaseId: purchase.purchase_id,
+                    amount: payAmount,
+                    status: newStatus
+                });
+                appliedTotal += payAmount;
+            };
+
+            if (mode === 'manual') {
+                if (!Array.isArray(allocations) || allocations.length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Debes enviar allocations para pago manual'
+                    });
+                }
+
+                const purchaseMap = new Map(purchases.map(p => [p.purchase_id, p]));
+                for (const allocation of allocations) {
+                    const purchase = purchaseMap.get(allocation.purchaseId);
+                    const allocationAmount = parseFloat(allocation.amount);
+                    if (!purchase) {
+                        return res.status(400).json({
+                            success: false,
+                            error: 'Una de las compras seleccionadas no existe'
+                        });
+                    }
+                    if (!allocationAmount || allocationAmount <= 0) {
+                        return res.status(400).json({
+                            success: false,
+                            error: 'El monto asignado debe ser mayor a 0'
+                        });
+                    }
+                    if (allocationAmount > remaining) {
+                        return res.status(400).json({
+                            success: false,
+                            error: 'La suma de asignaciones excede el monto del pago'
+                        });
+                    }
+
+                    await applyPaymentToPurchase(purchase, allocationAmount);
+                    remaining -= allocationAmount;
+                }
+            } else {
+                for (const purchase of purchases) {
+                    if (remaining <= 0) break;
+                    const alloc = Math.min(parseFloat(purchase.remaining_amount), remaining);
+                    await applyPaymentToPurchase(purchase, alloc);
+                    remaining -= alloc;
+                }
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Pago registrado correctamente',
+                applied,
+                appliedTotal,
+                unallocatedAmount: remaining,
+                transactionId: paymentTransaction.transaction_id
+            });
+
+        } catch (error) {
+            if (error.code === 'CREDIT_LIMIT_EXCEEDED') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cupo insuficiente en la tarjeta de crédito'
+                });
+            }
+            Logger.error('Error en recordCardPayment', error);
             return res.status(500).json({
                 success: false,
                 error: 'Error al registrar el pago'
