@@ -1303,7 +1303,7 @@ class ApiController {
     async createAccount(req, res) {
         try {
             const user = req.user;
-            const { name, type, bankName, balance = 0, color, icon, creditLimit, statementDay, dueDay, interestRate } = req.body;
+            const { name, type, bankName, balance = 0, color, icon, creditLimit, statementDay, dueDay, interestRate, createReminders } = req.body;
 
             if (!name || !type) {
                 return res.status(400).json({
@@ -1326,7 +1326,7 @@ class ApiController {
                 dueDay: dueDay ? parseInt(dueDay) : null
             });
 
-            if (type === 'credit_card') {
+            if (type === 'credit_card' && createReminders) {
                 const reminders = [];
                 const statement = statementDay ? parseInt(statementDay) : null;
                 const due = dueDay ? parseInt(dueDay) : null;
@@ -1340,7 +1340,7 @@ class ApiController {
                     return candidate;
                 };
 
-                if (statement && statement >= 1 && statement <= 28) {
+                if (statement && statement >= 1 && statement <= 31) {
                     reminders.push({
                         userId: user.user_id,
                         message: `Corte de tarjeta ${name}`,
@@ -1350,7 +1350,7 @@ class ApiController {
                     });
                 }
 
-                if (due && due >= 1 && due <= 28) {
+                if (due && due >= 1 && due <= 31) {
                     reminders.push({
                         userId: user.user_id,
                         message: `Pago de tarjeta ${name}`,
