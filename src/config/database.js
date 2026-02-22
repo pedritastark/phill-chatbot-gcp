@@ -14,17 +14,25 @@ const Logger = require('../utils/logger');
  * - DB_PASSWORD: Contraseña de la base de datos
  */
 
+const isProduction = process.env.NODE_ENV === 'production';
+const rawDbUser = process.env.DB_USER;
+const safeDbUser = rawDbUser && !/\s/.test(rawDbUser)
+  ? rawDbUser
+  : (process.env.USER || 'sebastianpedraza');
+const rawDbPassword = process.env.DB_PASSWORD;
+const safeDbPassword = rawDbPassword === 'tu_password_seguro' ? '' : (rawDbPassword || '');
+
 // Configuración del pool de conexiones
 const poolConfig = {
-  // Opción 1: URL completa (ideal para producción)
-  connectionString: process.env.DATABASE_URL,
+  // En local priorizamos DB_HOST/DB_NAME para evitar usar DATABASE_URL remota por accidente.
+  connectionString: isProduction ? process.env.DATABASE_URL : undefined,
 
   // Opción 2: Configuración individual (ideal para desarrollo)
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
   database: process.env.DB_NAME || 'phill_db',
-  user: process.env.DB_USER || 'sebastianpedraza',
-  password: process.env.DB_PASSWORD || '',
+  user: safeDbUser,
+  password: safeDbPassword,
 
   // Configuración del pool
   max: parseInt(process.env.DB_POOL_MAX || '20'), // Máximo de conexiones
@@ -177,4 +185,3 @@ module.exports = {
   closePool,
   getPoolStats,
 };
-
