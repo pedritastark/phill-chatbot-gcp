@@ -21,18 +21,20 @@ const safeDbUser = rawDbUser && !/\s/.test(rawDbUser)
   : (process.env.USER || 'sebastianpedraza');
 const rawDbPassword = process.env.DB_PASSWORD;
 const safeDbPassword = rawDbPassword === 'tu_password_seguro' ? '' : (rawDbPassword || '');
+const shouldUseConnectionString = isProduction && !!process.env.DATABASE_URL;
 
 // Configuración del pool de conexiones
 const poolConfig = {
-  // En local priorizamos DB_HOST/DB_NAME para evitar usar DATABASE_URL remota por accidente.
-  connectionString: isProduction ? process.env.DATABASE_URL : undefined,
-
-  // Opción 2: Configuración individual (ideal para desarrollo)
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'phill_db',
-  user: safeDbUser,
-  password: safeDbPassword,
+  // En Railway/producción usamos exclusivamente DATABASE_URL para evitar mezclar host local.
+  ...(shouldUseConnectionString
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'phill_db',
+      user: safeDbUser,
+      password: safeDbPassword,
+    }),
 
   // Configuración del pool
   max: parseInt(process.env.DB_POOL_MAX || '20'), // Máximo de conexiones
