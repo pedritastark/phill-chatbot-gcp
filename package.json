@@ -11,6 +11,7 @@
     "migrate:reset": "node scripts/migrate.js reset",
     "migrate:seed": "node scripts/migrate-seed.js",
     "seed": "node scripts/seed.js",
+    "seed:prod-safe": "node scripts/seed.js --prod-safe",
     "lint": "eslint .",
     "prep": "npm run lint",
     "prepare": "husky"
