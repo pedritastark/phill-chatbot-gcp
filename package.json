@@ -14,7 +14,7 @@
     "seed:prod-safe": "node scripts/seed.js --prod-safe",
     "lint": "eslint .",
     "prep": "npm run lint",
-    "prepare": "husky"
+    "prepare": "node -e \"if (process.env.NODE_ENV !== 'production') { require('child_process').execSync('husky', { stdio: 'inherit' }); }\""
   },
   "keywords": [
     "twilio",
