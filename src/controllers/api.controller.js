@@ -888,13 +888,20 @@ class ApiController {
                 description,
                 category,
                 categoryId,
+                category_id,
                 accountId,
+                account_id,
                 accountName,
                 date,
+                transactionDate,
+                transaction_date,
                 notes,
                 currency = 'COP',
                 status = 'completed'
             } = req.body;
+            const resolvedAccountId = accountId || account_id || null;
+            const resolvedCategoryId = categoryId || category_id || null;
+            const resolvedTransactionDate = transactionDate || transaction_date || date;
 
             if (!type || !amount || !description) {
                 return res.status(400).json({
@@ -912,9 +919,9 @@ class ApiController {
 
             // Get account name from accountId if provided
             let resolvedAccountName = accountName;
-            if (accountId && !accountName) {
+            if (resolvedAccountId && !accountName) {
                 const accounts = await AccountDBService.findByUser(user.user_id);
-                const account = accounts.find(a => a.account_id === accountId);
+                const account = accounts.find(a => a.account_id === resolvedAccountId);
                 if (account) {
                     resolvedAccountName = account.name;
                 }
@@ -922,9 +929,9 @@ class ApiController {
 
             // Get category name from categoryId if provided
             let resolvedCategory = category;
-            if (categoryId && !category) {
+            if (resolvedCategoryId && !category) {
                 const categories = await CategoryDBService.findByUser(user.user_id);
-                const cat = categories.find(c => c.category_id === categoryId);
+                const cat = categories.find(c => c.category_id === resolvedCategoryId);
                 if (cat) {
                     resolvedCategory = cat.name;
                 }
@@ -937,9 +944,10 @@ class ApiController {
                 description,
                 resolvedCategory || null,
                 resolvedAccountName || null,
-                accountId || null,
+                resolvedAccountId,
                 currency,
-                status
+                status,
+                resolvedTransactionDate
             );
 
             return res.status(201).json({
@@ -981,6 +989,12 @@ class ApiController {
             const user = req.user;
             const { id } = req.params;
             const updateData = req.body;
+            const normalizedUpdateData = {
+                ...updateData,
+                accountId: updateData.accountId || updateData.account_id,
+                categoryId: updateData.categoryId || updateData.category_id,
+                transactionDate: updateData.transactionDate || updateData.transaction_date || updateData.date
+            };
 
             // Verify ownership (transaction belongs to user)
             const transactions = await FinanceService.getUserTransactions(user.phone_number, {});
@@ -993,7 +1007,7 @@ class ApiController {
                 });
             }
 
-            const updated = await FinanceService.updateTransaction(id, updateData);
+            const updated = await FinanceService.updateTransaction(id, normalizedUpdateData);
 
             return res.status(200).json({
                 success: true,
@@ -1304,11 +1318,23 @@ class ApiController {
         try {
             const user = req.user;
             const { name, type, bankName, balance = 0, color, icon, creditLimit, statementDay, dueDay, interestRate, createReminders } = req.body;
+            const parsedStatementDay = statementDay ? parseInt(statementDay, 10) : null;
+            const parsedDueDay = dueDay ? parseInt(dueDay, 10) : null;
 
             if (!name || !type) {
                 return res.status(400).json({
                     success: false,
                     error: 'Nombre y tipo son requeridos'
+                });
+            }
+
+            if (
+                (parsedStatementDay && (parsedStatementDay < 1 || parsedStatementDay > 28)) ||
+                (parsedDueDay && (parsedDueDay < 1 || parsedDueDay > 28))
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'statementDay y dueDay deben estar entre 1 y 28'
                 });
             }
 
@@ -1322,14 +1348,14 @@ class ApiController {
                 icon,
                 creditLimit: creditLimit ? parseFloat(creditLimit) : null,
                 interestRate: interestRate ? parseFloat(interestRate) : null,
-                statementDay: statementDay ? parseInt(statementDay) : null,
-                dueDay: dueDay ? parseInt(dueDay) : null
+                statementDay: parsedStatementDay,
+                dueDay: parsedDueDay
             });
 
             if (type === 'credit_card' && createReminders) {
                 const reminders = [];
-                const statement = statementDay ? parseInt(statementDay) : null;
-                const due = dueDay ? parseInt(dueDay) : null;
+                const statement = parsedStatementDay;
+                const due = parsedDueDay;
 
                 const buildNextDate = (day) => {
                     const now = new Date();
@@ -1838,6 +1864,432 @@ class ApiController {
             });
         }
     }
+    // ==========================================
+    // DEBTS ENDPOINTS (Gestor de Deudas)
+    // ==========================================
+
+    /**
+     * GET /api/v1/debts
+     * Get all debts for the authenticated user
+     */
+    async getDebts(req, res) {
+        try {
+            const user = req.user;
+            const { query: dbQuery } = require('../config/database');
+
+            const result = await dbQuery(
+                `SELECT * FROM debts
+                 WHERE user_id = $1 AND status IN ('active', 'paid_off')
+                 ORDER BY status ASC, created_at DESC`,
+                [user.user_id]
+            );
+
+            const debts = result.rows.map(d => ({
+                id: d.debt_id,
+                name: d.name,
+                totalAmount: parseFloat(d.total_amount),
+                remainingAmount: parseFloat(d.remaining_amount),
+                totalPaid: parseFloat(d.total_paid),
+                interestRate: d.interest_rate ? parseFloat(d.interest_rate) : null,
+                rateType: d.rate_type,
+                termMonths: d.term_months,
+                monthlyPayment: d.monthly_payment ? parseFloat(d.monthly_payment) : null,
+                paymentDueDay: d.payment_due_day,
+                linkedAccountId: d.linked_account_id,
+                category: d.category,
+                status: d.status,
+                createdAt: d.created_at
+            }));
+
+            return res.status(200).json({
+                success: true,
+                debts
+            });
+
+        } catch (error) {
+            Logger.error('Error en getDebts', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener deudas'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/debts
+     * Create a new debt
+     */
+    async createDebt(req, res) {
+        try {
+            const user = req.user;
+            const {
+                name,
+                totalAmount,
+                interestRate,
+                rateType = 'fixed',
+                termMonths,
+                monthlyPayment,
+                paymentDueDay,
+                linkedAccountId,
+                category = 'other'
+            } = req.body;
+
+            if (!name || !totalAmount) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Nombre y monto total son requeridos'
+                });
+            }
+
+            const parsedAmount = parseFloat(totalAmount);
+            if (parsedAmount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El monto debe ser mayor a 0'
+                });
+            }
+
+            const { query: dbQuery } = require('../config/database');
+
+            const result = await dbQuery(
+                `INSERT INTO debts
+                 (user_id, name, total_amount, remaining_amount, interest_rate, rate_type, term_months, monthly_payment, payment_due_day, linked_account_id, category)
+                 VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10)
+                 RETURNING *`,
+                [
+                    user.user_id,
+                    name,
+                    parsedAmount,
+                    interestRate ? parseFloat(interestRate) : null,
+                    rateType,
+                    termMonths ? parseInt(termMonths) : null,
+                    monthlyPayment ? parseFloat(monthlyPayment) : null,
+                    paymentDueDay ? parseInt(paymentDueDay) : null,
+                    linkedAccountId || null,
+                    category
+                ]
+            );
+
+            const debt = result.rows[0];
+
+            return res.status(201).json({
+                success: true,
+                debt: {
+                    id: debt.debt_id,
+                    name: debt.name,
+                    totalAmount: parseFloat(debt.total_amount),
+                    remainingAmount: parseFloat(debt.remaining_amount),
+                    totalPaid: 0,
+                    category: debt.category,
+                    status: debt.status
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en createDebt', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al crear deuda'
+            });
+        }
+    }
+
+    /**
+     * PUT /api/v1/debts/:id
+     * Update a debt
+     */
+    async updateDebt(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+            const updateData = req.body;
+
+            const { query: dbQuery } = require('../config/database');
+
+            const fields = [];
+            const values = [id, user.user_id];
+            let paramIndex = 3;
+
+            const allowedFields = [
+                'name', 'interest_rate', 'rate_type', 'term_months',
+                'monthly_payment', 'payment_due_day', 'linked_account_id', 'category', 'status'
+            ];
+
+            for (const [key, value] of Object.entries(updateData)) {
+                const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+                if (allowedFields.includes(snakeKey)) {
+                    fields.push(`${snakeKey} = $${paramIndex}`);
+                    values.push(value);
+                    paramIndex++;
+                }
+            }
+
+            if (fields.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No hay campos válidos para actualizar'
+                });
+            }
+
+            const result = await dbQuery(
+                `UPDATE debts
+                 SET ${fields.join(', ')}, updated_at = NOW()
+                 WHERE debt_id = $1 AND user_id = $2
+                 RETURNING *`,
+                values
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Deuda no encontrada'
+                });
+            }
+
+            const debt = result.rows[0];
+
+            return res.status(200).json({
+                success: true,
+                debt: {
+                    id: debt.debt_id,
+                    name: debt.name,
+                    totalAmount: parseFloat(debt.total_amount),
+                    remainingAmount: parseFloat(debt.remaining_amount),
+                    totalPaid: parseFloat(debt.total_paid),
+                    status: debt.status
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en updateDebt', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al actualizar deuda'
+            });
+        }
+    }
+
+    /**
+     * DELETE /api/v1/debts/:id
+     * Soft-delete a debt (set status to cancelled)
+     */
+    async deleteDebt(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+
+            const { query: dbQuery } = require('../config/database');
+
+            const result = await dbQuery(
+                `UPDATE debts
+                 SET status = 'cancelled', updated_at = NOW()
+                 WHERE debt_id = $1 AND user_id = $2
+                 RETURNING *`,
+                [id, user.user_id]
+            );
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Deuda no encontrada'
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: 'Deuda eliminada correctamente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en deleteDebt', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al eliminar deuda'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/debts/:id/payment
+     * Register a payment towards a debt
+     * - Validates account exists and has sufficient balance
+     * - Calculates interest/principal split if rate exists
+     * - Creates expense transaction
+     * - Updates account balance
+     * - Inserts debt_payment record
+     * - Updates debt remaining_amount and total_paid
+     * - Sets status to paid_off if remaining <= 0
+     */
+    async payDebt(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+            const { amount, from_account_id, notes } = req.body;
+
+            // Validate amount
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Monto debe ser mayor a 0'
+                });
+            }
+
+            const parsedAmount = parseFloat(amount);
+
+            // Validate from_account_id
+            if (!from_account_id) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Cuenta de origen requerida'
+                });
+            }
+
+            // Get source account and validate
+            const sourceAccount = await AccountDBService.findById(from_account_id);
+            if (!sourceAccount) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Cuenta de origen no encontrada'
+                });
+            }
+
+            if (sourceAccount.user_id !== user.user_id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'No tienes permiso para usar esta cuenta'
+                });
+            }
+
+            // Check sufficient balance
+            const isLiability = ['credit_card', 'loan', 'debt'].includes(sourceAccount.type);
+            if (!isLiability && parseFloat(sourceAccount.balance) < parsedAmount) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Saldo insuficiente en la cuenta de origen'
+                });
+            }
+
+            const { query: dbQuery } = require('../config/database');
+
+            // Verify debt exists and is active
+            const debtCheck = await dbQuery(
+                `SELECT * FROM debts WHERE debt_id = $1 AND user_id = $2 AND status = 'active'`,
+                [id, user.user_id]
+            );
+
+            if (debtCheck.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Deuda no encontrada o no está activa'
+                });
+            }
+
+            const debtData = debtCheck.rows[0];
+            const remaining = parseFloat(debtData.remaining_amount);
+            const interestRate = debtData.interest_rate ? parseFloat(debtData.interest_rate) : null;
+
+            // Calculate interest/principal split
+            let interestAmount = 0;
+            let principalAmount = parsedAmount;
+
+            if (interestRate && interestRate > 0) {
+                interestAmount = Math.round(remaining * (interestRate / 100 / 12));
+                principalAmount = Math.max(0, parsedAmount - interestAmount);
+            }
+
+            // Cap principal to remaining amount
+            if (principalAmount > remaining) {
+                principalAmount = remaining;
+            }
+
+            // Find or create "Pago Deuda" category
+            const debtCategory = await CategoryDBService.findOrCreate(
+                user.user_id,
+                'Pago Deuda',
+                'expense'
+            );
+
+            // Create expense transaction
+            const transaction = await TransactionDBService.create({
+                userId: user.user_id,
+                accountId: from_account_id,
+                categoryId: debtCategory.category_id,
+                type: 'expense',
+                amount: parsedAmount,
+                description: `Pago deuda: ${debtData.name}`,
+                transactionDate: new Date(),
+                notes: notes || `Pago a deuda "${debtData.name}"`,
+                currency: sourceAccount.currency || 'COP',
+                status: 'completed'
+            });
+
+            // Update account balance
+            const operation = isLiability ? 'add' : 'subtract';
+            await AccountDBService.updateBalance(from_account_id, parsedAmount, operation);
+
+            // Insert debt payment record
+            await dbQuery(
+                `INSERT INTO debt_payments
+                 (debt_id, user_id, amount, principal_amount, interest_amount, from_account_id, payment_date, notes)
+                 VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7)`,
+                [id, user.user_id, parsedAmount, principalAmount, interestAmount, from_account_id, notes || null]
+            );
+
+            // Update debt: reduce remaining, increase total_paid
+            const newRemaining = Math.max(0, remaining - principalAmount);
+            const result = await dbQuery(
+                `UPDATE debts
+                 SET remaining_amount = $3,
+                     total_paid = total_paid + $4,
+                     status = CASE
+                       WHEN $3 <= 0 THEN 'paid_off'
+                       ELSE status
+                     END,
+                     updated_at = NOW()
+                 WHERE debt_id = $1 AND user_id = $2
+                 RETURNING *`,
+                [id, user.user_id, newRemaining, parsedAmount]
+            );
+
+            const debt = result.rows[0];
+            const isPaidOff = debt.status === 'paid_off';
+
+            Logger.success(`Pago a deuda "${debt.name}": $${parsedAmount} desde ${sourceAccount.name}`);
+
+            return res.status(200).json({
+                success: true,
+                debt: {
+                    id: debt.debt_id,
+                    name: debt.name,
+                    remainingAmount: parseFloat(debt.remaining_amount),
+                    totalAmount: parseFloat(debt.total_amount),
+                    totalPaid: parseFloat(debt.total_paid),
+                    status: debt.status
+                },
+                payment: {
+                    amount: parsedAmount,
+                    principalAmount,
+                    interestAmount,
+                    fromAccount: sourceAccount.name
+                },
+                transaction: {
+                    id: transaction.transaction_id,
+                    amount: parsedAmount
+                },
+                message: isPaidOff
+                    ? `Deuda "${debt.name}" pagada completamente`
+                    : `Pago de $${parsedAmount.toLocaleString('es-CO')} registrado a "${debt.name}"`
+            });
+
+        } catch (error) {
+            Logger.error('Error en payDebt', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al registrar pago de deuda'
+            });
+        }
+    }
+
     // ==========================================
     // CHATBOT WEB ENDPOINTS
     // ==========================================

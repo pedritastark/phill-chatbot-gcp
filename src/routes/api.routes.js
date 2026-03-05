@@ -83,6 +83,13 @@ router.post('/goals', ApiController.createGoal.bind(ApiController));
 router.put('/goals/:id', ApiController.updateGoal.bind(ApiController));
 router.post('/goals/:id/deposit', ApiController.depositToGoal.bind(ApiController));
 
+// Debts (Gestor de Deudas)
+router.get('/debts', ApiController.getDebts.bind(ApiController));
+router.post('/debts', ApiController.createDebt.bind(ApiController));
+router.put('/debts/:id', ApiController.updateDebt.bind(ApiController));
+router.delete('/debts/:id', ApiController.deleteDebt.bind(ApiController));
+router.post('/debts/:id/payment', ApiController.payDebt.bind(ApiController));
+
 // Credit Card Purchases (Compras a Cuotas)
 router.get('/credit-purchases', ApiController.getCreditPurchases.bind(ApiController));
 router.post('/credit-purchases', ApiController.createCreditPurchase.bind(ApiController));

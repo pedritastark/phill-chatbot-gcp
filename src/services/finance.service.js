@@ -35,7 +35,18 @@ class FinanceService {
    * @param {string} status - Estado (opcional, default 'completed')
    * @returns {Promise<Object>}
    */
-  async createTransaction(userId, type, amount, description, categoryName = null, accountName = null, accountId = null, currency = 'COP', status = 'completed') {
+  async createTransaction(
+    userId,
+    type,
+    amount,
+    description,
+    categoryName = null,
+    accountName = null,
+    accountId = null,
+    currency = 'COP',
+    status = 'completed',
+    transactionDate = null
+  ) {
     try {
       const user = await UserDBService.findOrCreate({ phoneNumber: userId });
 
@@ -157,6 +168,7 @@ class FinanceService {
         type,
         amount,
         description,
+        transactionDate: transactionDate || new Date(),
         detectedByAI: detectedByAI,
         confidenceScore: confidence,
         currency: currency || 'COP', // Default safe
