@@ -4,6 +4,7 @@ const { config } = require('../config/environment');
 const ReminderDBService = require('./db/reminder.db.service');
 const UserDBService = require('./db/user.db.service');
 const Logger = require('../utils/logger');
+const { addMonthsSafe } = require('../utils/dateUtils');
 
 class ReminderScheduler {
     constructor() {
@@ -81,19 +82,24 @@ class ReminderScheduler {
 
             // Si es recurrente, programar el siguiente
             if (reminder.is_recurring) {
-                const nextDate = new Date(reminder.scheduled_at);
+                let nextDate;
+                const currentDate = new Date(reminder.scheduled_at);
 
                 switch (reminder.recurrence_pattern) {
                     case 'daily':
+                        nextDate = new Date(currentDate);
                         nextDate.setDate(nextDate.getDate() + 1);
                         break;
                     case 'weekly':
+                        nextDate = new Date(currentDate);
                         nextDate.setDate(nextDate.getDate() + 7);
                         break;
                     case 'monthly':
-                        nextDate.setMonth(nextDate.getMonth() + 1);
+                        // Use safe month addition to handle February edge cases
+                        nextDate = addMonthsSafe(currentDate, 1);
                         break;
                     case 'yearly':
+                        nextDate = new Date(currentDate);
                         nextDate.setFullYear(nextDate.getFullYear() + 1);
                         break;
                 }

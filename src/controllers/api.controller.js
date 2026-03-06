@@ -1353,24 +1353,17 @@ class ApiController {
             });
 
             if (type === 'credit_card' && createReminders) {
+                const { buildNextMonthlyDate } = require('../utils/dateUtils');
                 const reminders = [];
                 const statement = parsedStatementDay;
                 const due = parsedDueDay;
 
-                const buildNextDate = (day) => {
-                    const now = new Date();
-                    const candidate = new Date(now.getFullYear(), now.getMonth(), day, 9, 0, 0);
-                    if (candidate < now) {
-                        return new Date(now.getFullYear(), now.getMonth() + 1, day, 9, 0, 0);
-                    }
-                    return candidate;
-                };
-
+                // Use buildNextMonthlyDate which safely handles February edge cases
                 if (statement && statement >= 1 && statement <= 31) {
                     reminders.push({
                         userId: user.user_id,
                         message: `Corte de tarjeta ${name}`,
-                        scheduledAt: buildNextDate(statement).toISOString(),
+                        scheduledAt: buildNextMonthlyDate(statement).toISOString(),
                         isRecurring: true,
                         recurrencePattern: 'monthly'
                     });
@@ -1380,7 +1373,7 @@ class ApiController {
                     reminders.push({
                         userId: user.user_id,
                         message: `Pago de tarjeta ${name}`,
-                        scheduledAt: buildNextDate(due).toISOString(),
+                        scheduledAt: buildNextMonthlyDate(due).toISOString(),
                         isRecurring: true,
                         recurrencePattern: 'monthly'
                     });
