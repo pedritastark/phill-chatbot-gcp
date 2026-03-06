@@ -1437,9 +1437,33 @@ class ApiController {
 
             const account = accountResult.rows[0];
 
+            // VALIDATION: Check if this is the user's last account
+            const accountCountResult = await dbQuery(
+                `SELECT COUNT(*) as count FROM accounts WHERE user_id = $1`,
+                [user.user_id]
+            );
+            const accountCount = parseInt(accountCountResult.rows[0].count);
+
+            if (accountCount === 1) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No puedes eliminar tu única cuenta. Debes tener al menos una cuenta activa.'
+                });
+            }
+
+            // VALIDATION: Warn about balance (included in response metadata)
+            const hasBalance = Math.abs(parseFloat(account.balance || 0)) > 0;
+            const balance = parseFloat(account.balance || 0);
+
+            // Delete associated reminders for this account (e.g., credit card payment reminders)
+            await dbQuery(
+                `DELETE FROM reminders WHERE user_id = $1 AND message LIKE $2`,
+                [user.user_id, `%${account.name}%`]
+            );
+
             // Delete associated credit card purchases if any
             await dbQuery(
-                `DELETE FROM credit_purchase_payments WHERE purchase_id IN 
+                `DELETE FROM credit_purchase_payments WHERE purchase_id IN
                  (SELECT purchase_id FROM credit_card_purchases WHERE account_id = $1)`,
                 [id]
             );
@@ -1449,10 +1473,11 @@ class ApiController {
             );
 
             // Delete all transactions for this account
-            await dbQuery(
-                `DELETE FROM transactions WHERE account_id = $1`,
+            const transactionsResult = await dbQuery(
+                `DELETE FROM transactions WHERE account_id = $1 RETURNING transaction_id`,
                 [id]
             );
+            const deletedTransactionsCount = transactionsResult.rows.length;
 
             // Delete the account
             await dbQuery(
@@ -1460,11 +1485,16 @@ class ApiController {
                 [id]
             );
 
-            Logger.info(`🗑️ Account ${id} (${account.name}) deleted for user ${user.user_id}`);
+            Logger.info(`🗑️ Account ${id} (${account.name}) deleted for user ${user.user_id} - ${deletedTransactionsCount} transactions removed`);
 
             return res.status(200).json({
                 success: true,
-                message: `Cuenta "${account.name}" eliminada junto con todas sus transacciones`
+                message: `Cuenta "${account.name}" eliminada correctamente`,
+                metadata: {
+                    deletedTransactions: deletedTransactionsCount,
+                    hadBalance: hasBalance,
+                    balance: balance
+                }
             });
 
         } catch (error) {
