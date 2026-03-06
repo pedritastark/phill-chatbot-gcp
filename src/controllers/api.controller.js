@@ -2536,11 +2536,12 @@ class ApiController {
 
             const account = accountResult.rows[0];
             const limit = parseFloat(account.credit_limit || 0);
-            const used = parseFloat(account.balance || 0);
-            if (limit > 0 && (used + parseFloat(totalAmount)) > limit) {
+            const usedCredit = Math.abs(parseFloat(account.balance || 0)); // Usar valor absoluto
+            if (limit > 0 && (usedCredit + parseFloat(totalAmount)) > limit) {
+                const available = limit - usedCredit;
                 return res.status(400).json({
                     success: false,
-                    error: 'Cupo insuficiente en la tarjeta de crédito'
+                    error: `Cupo insuficiente. Disponible: $${available.toLocaleString('es-CO')}`
                 });
             }
 
