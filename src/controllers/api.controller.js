@@ -401,6 +401,7 @@ class ApiController {
                     name: user.name,
                     email: user.email,
                     phone: user.phone_number.replace('whatsapp:', ''),
+                    profilePhoto: user.profile_photo || null,
                     currency: user.currency,
                     language: user.language,
                     timezone: user.timezone,
