@@ -300,6 +300,18 @@ class FinanceService {
       else period = 'all';
 
       const summary = await TransactionDBService.getSummary(user.user_id, period);
+      let prevSummary = null;
+
+      if (period === 'month') {
+        const now = new Date();
+        const startCurrent = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+        const startPrev = new Date(now.getTime() - days * 2 * 24 * 60 * 60 * 1000);
+        prevSummary = await TransactionDBService.getSummaryByDateRange(
+          user.user_id,
+          startPrev,
+          startCurrent
+        );
+      }
 
       const totalBalanceVal = await AccountDBService.getTotalBalance(user.user_id);
 
@@ -316,6 +328,8 @@ class FinanceService {
         period: `últimos ${days} días`,
         avgExpense: new Decimal(summary.avg_expense || 0).toNumber(),
         avgIncome: new Decimal(summary.avg_income || 0).toNumber(),
+        prevIncome: prevSummary ? new Decimal(prevSummary.total_income || 0).toNumber() : null,
+        prevExpenses: prevSummary ? new Decimal(prevSummary.total_expenses || 0).toNumber() : null,
       };
 
       Logger.finance(`Resumen generado para ${phoneNumber}: Balance $${result.balance}`);

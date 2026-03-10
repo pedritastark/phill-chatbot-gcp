@@ -213,6 +213,28 @@ class TransactionDBService {
     }
   }
 
+  async getSummaryByDateRange(userId, startDate, endDate) {
+    try {
+      const result = await query(
+        `SELECT 
+          COUNT(*) as transaction_count,
+          COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) as total_income,
+          COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as total_expenses,
+          COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) as balance,
+          COALESCE(AVG(CASE WHEN type = 'expense' THEN amount END), 0) as avg_expense,
+          COALESCE(AVG(CASE WHEN type = 'income' THEN amount END), 0) as avg_income
+         FROM transactions
+         WHERE user_id = $1 AND is_deleted = false AND transaction_date >= $2 AND transaction_date < $3`,
+        [userId, startDate, endDate]
+      );
+
+      return result.rows[0];
+    } catch (error) {
+      Logger.error('Error al obtener resumen por rango de fechas', error);
+      throw error;
+    }
+  }
+
   /**
    * Obtiene transacciones agrupadas por categoría
    * @param {string} userId - UUID del usuario
