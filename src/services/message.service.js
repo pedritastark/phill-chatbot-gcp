@@ -451,7 +451,10 @@ class MessageService {
 
           // Deduplicar nombres de cuentas para la lista
           const uniqueAccountNames = [...new Set(accounts.map(a => a.name))];
-          return `¿Desde qué cuenta quieres registrar este ${type === 'expense' ? 'gasto' : 'ingreso'}? 💜\n\nOpciones: ${uniqueAccountNames.join(', ')}`;
+          const accountPrompt = type === 'expense'
+            ? '¿Desde qué cuenta quieres registrar este gasto?'
+            : '¿A qué cuenta quieres registrar este ingreso?';
+          return `${accountPrompt} 💜\n\nOpciones: ${uniqueAccountNames.join(', ')}`;
         } else if (accounts.length === 1) {
           // Si solo tiene una cuenta, usar esa automáticamente
           targetAccount = accounts[0];

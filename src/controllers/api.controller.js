@@ -1914,7 +1914,7 @@ class ApiController {
                 totalAmount: parseFloat(d.total_amount),
                 remainingAmount: parseFloat(d.remaining_amount),
                 totalPaid: parseFloat(d.total_paid),
-                interestRate: d.interest_rate ? parseFloat(d.interest_rate) : null,
+                interestRate: d.interest_rate !== null ? parseFloat(d.interest_rate) : null,
                 rateType: d.rate_type,
                 termMonths: d.term_months,
                 monthlyPayment: d.monthly_payment ? parseFloat(d.monthly_payment) : null,
@@ -1975,6 +1975,9 @@ class ApiController {
 
             const { query: dbQuery } = require('../config/database');
 
+            const hasInterestRate = interestRate !== undefined && interestRate !== null && interestRate !== '';
+            const parsedInterestRate = hasInterestRate ? parseFloat(interestRate) : null;
+
             const result = await dbQuery(
                 `INSERT INTO debts
                  (user_id, name, total_amount, remaining_amount, interest_rate, rate_type, term_months, monthly_payment, payment_due_day, linked_account_id, category)
@@ -1984,7 +1987,7 @@ class ApiController {
                     user.user_id,
                     name,
                     parsedAmount,
-                    interestRate ? parseFloat(interestRate) : null,
+                    parsedInterestRate,
                     rateType,
                     termMonths ? parseInt(termMonths) : null,
                     monthlyPayment ? parseFloat(monthlyPayment) : null,
