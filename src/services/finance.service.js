@@ -161,6 +161,7 @@ class FinanceService {
       }
 
       // 4. Crear la transacción
+      const currencyToUse = (account && account.currency) ? account.currency : (currency || 'COP');
       const transaction = await TransactionDBService.create({
         userId: user.user_id,
         accountId: account ? account.account_id : null,
@@ -171,7 +172,7 @@ class FinanceService {
         transactionDate: transactionDate || new Date(),
         detectedByAI: detectedByAI,
         confidenceScore: confidence,
-        currency: currency || 'COP', // Default safe
+        currency: currencyToUse, // Use account currency when available
         status: status || 'completed' // Default safe
       });
 

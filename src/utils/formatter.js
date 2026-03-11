@@ -5,19 +5,11 @@
  * @returns {string} - Cadena formateada
  */
 function formatCurrency(amount, currency = 'COP') {
-    if (currency === 'USD') {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(amount);
-    }
-
-    // Default COP format (no decimals usually)
+    const resolvedCurrency = String(currency || 'COP').toUpperCase();
+    // Use a consistent locale; currency code controls symbol/formatting.
     return new Intl.NumberFormat('es-CO', {
         style: 'currency',
-        currency: 'COP',
+        currency: resolvedCurrency,
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
     }).format(amount);

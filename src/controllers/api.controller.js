@@ -922,7 +922,7 @@ class ApiController {
                 transactionDate,
                 transaction_date,
                 notes,
-                currency = 'COP',
+                currency,
                 status = 'completed'
             } = req.body;
             const resolvedAccountId = accountId || account_id || null;
@@ -943,14 +943,23 @@ class ApiController {
                 });
             }
 
-            // Get account name from accountId if provided
+            // Resolve account name/currency from accountId when possible.
+            // Currency is "moneda contable" per cuenta; do not take it from Settings.
             let resolvedAccountName = accountName;
-            if (resolvedAccountId && !accountName) {
-                const accounts = await AccountDBService.findByUser(user.user_id);
-                const account = accounts.find(a => a.account_id === resolvedAccountId);
-                if (account) {
-                    resolvedAccountName = account.name;
+            let resolvedCurrency = String(currency || user.currency || 'COP').toUpperCase();
+            if (resolvedAccountId) {
+                const account = await AccountDBService.findById(resolvedAccountId);
+                if (account && account.user_id === user.user_id) {
+                    if (!resolvedAccountName) resolvedAccountName = account.name;
+                    if (account.currency) resolvedCurrency = String(account.currency).toUpperCase();
                 }
+            }
+
+            if (!['COP', 'USD', 'EUR', 'MXN', 'ARS', 'CLP'].includes(resolvedCurrency)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Moneda inválida. Usa COP, USD, EUR, MXN, ARS o CLP'
+                });
             }
 
             // Get category name from categoryId if provided
@@ -971,7 +980,7 @@ class ApiController {
                 resolvedCategory || null,
                 resolvedAccountName || null,
                 resolvedAccountId,
-                currency,
+                resolvedCurrency,
                 status,
                 resolvedTransactionDate
             );
@@ -1343,14 +1352,22 @@ class ApiController {
     async createAccount(req, res) {
         try {
             const user = req.user;
-            const { name, type, bankName, balance = 0, color, icon, creditLimit, statementDay, dueDay, interestRate, createReminders } = req.body;
+            const { name, type, bankName, balance = 0, color, icon, creditLimit, statementDay, dueDay, interestRate, createReminders, currency } = req.body;
             const parsedStatementDay = statementDay ? parseInt(statementDay, 10) : null;
             const parsedDueDay = dueDay ? parseInt(dueDay, 10) : null;
+            const resolvedCurrency = String(currency || user.currency || 'COP').toUpperCase();
 
             if (!name || !type) {
                 return res.status(400).json({
                     success: false,
                     error: 'Nombre y tipo son requeridos'
+                });
+            }
+
+            if (!['COP', 'USD', 'EUR', 'MXN', 'ARS', 'CLP'].includes(resolvedCurrency)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Moneda inválida. Usa COP, USD, EUR, MXN, ARS o CLP'
                 });
             }
 
@@ -1372,6 +1389,7 @@ class ApiController {
                 balance: parseFloat(balance),
                 color,
                 icon,
+                currency: resolvedCurrency,
                 creditLimit: creditLimit ? parseFloat(creditLimit) : null,
                 interestRate: interestRate ? parseFloat(interestRate) : null,
                 statementDay: parsedStatementDay,
@@ -2493,7 +2511,8 @@ class ApiController {
                 SELECT 
                     p.*,
                     a.name as account_name,
-                    a.bank_name
+                    a.bank_name,
+                    a.currency as account_currency
                 FROM credit_card_purchases p
                 JOIN accounts a ON p.account_id = a.account_id
                 WHERE p.user_id = $1
@@ -2519,6 +2538,7 @@ class ApiController {
                 accountId: p.account_id,
                 accountName: p.account_name,
                 bankName: p.bank_name,
+                currency: p.account_currency || 'COP',
                 description: p.description,
                 totalAmount: parseFloat(p.total_amount),
                 installments: p.installments,
