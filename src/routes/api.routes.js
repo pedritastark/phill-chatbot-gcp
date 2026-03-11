@@ -58,6 +58,9 @@ router.delete('/me/sessions/:id', ApiController.deleteSession.bind(ApiController
 // Dashboard
 router.get('/summary', ApiController.getSummary.bind(ApiController));
 
+// Reports / Export
+router.post('/reports/export', ApiController.exportReport.bind(ApiController));
+
 // Transactions
 router.get('/transactions', ApiController.getTransactions.bind(ApiController));
 router.post('/transactions', ApiController.createTransaction.bind(ApiController));

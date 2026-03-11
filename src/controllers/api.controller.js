@@ -7,6 +7,7 @@ const {
     ReminderDBService
 } = require('../services/db');
 const FinanceService = require('../services/finance.service');
+const ReportService = require('../services/report.service');
 const WhatsAppService = require('../services/whatsapp.service');
 const Logger = require('../utils/logger');
 const bcrypt = require('bcrypt');
@@ -794,6 +795,30 @@ class ApiController {
             return res.status(500).json({
                 success: false,
                 error: 'Error al obtener resumen'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/reports/export
+     * Export custom report as PDF
+     */
+    async exportReport(req, res) {
+        try {
+            const user = req.user;
+            const options = req.body || {};
+
+            const url = await ReportService.generateCustomReport({ user, options });
+
+            return res.status(200).json({
+                success: true,
+                url
+            });
+        } catch (error) {
+            Logger.error('Error en exportReport', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al generar el reporte'
             });
         }
     }

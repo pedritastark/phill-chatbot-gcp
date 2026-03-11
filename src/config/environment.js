@@ -59,7 +59,9 @@ const config = {
 
   // CORS Configuration
   cors: {
-    allowedOrigins: (process.env.CORS_ORIGINS || 'https://phill-webpage.vercel.app,http://localhost:5173,https://web-production-022a1.up.railway.app').split(','),
+    allowedOrigins: (process.env.CORS_ORIGINS || 'https://phill-webpage.vercel.app,http://localhost:5173,https://web-production-022a1.up.railway.app')
+      .split(',')
+      .map(origin => origin.trim().replace(/\/$/, '')),
   },
 
   // Modo Mantenimiento
@@ -86,4 +88,3 @@ function validateConfig() {
 }
 
 module.exports = { config, validateConfig };
-

@@ -18,12 +18,29 @@ function createApp() {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
-      if (config.cors.allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        Logger.warning(`CORS blocked origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+      const normalizedOrigin = origin.replace(/\/$/, '');
+
+      // In non-production, allow all origins to avoid dev friction
+      if (config.nodeEnv !== 'production') {
+        return callback(null, true);
       }
+
+      if (config.cors.allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      // Allow common deploy hosts (Vercel/Railway) if env was misconfigured
+      try {
+        const hostname = new URL(normalizedOrigin).hostname;
+        if (hostname.endsWith('vercel.app') || hostname.endsWith('railway.app')) {
+          return callback(null, true);
+        }
+      } catch (error) {
+        // ignore parsing errors
+      }
+
+      Logger.warning(`CORS blocked origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
