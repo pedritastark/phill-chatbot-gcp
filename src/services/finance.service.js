@@ -160,6 +160,22 @@ class FinanceService {
         }
       }
 
+      // Evitar sobrepago: no permitimos que el saldo usado quede negativo.
+      // Para tarjetas de crédito, el "balance" representa lo utilizado/deuda.
+      if (account && account.type === 'credit_card' && type === 'income' && status === 'completed') {
+        const used = new Decimal(account.balance || 0);
+        if (used.lte(0)) {
+          const err = new Error('La tarjeta no tiene saldo utilizado para pagar.');
+          err.code = 'NO_CREDIT_BALANCE';
+          throw err;
+        }
+        if (new Decimal(amount).gt(used)) {
+          const err = new Error('El pago excede el saldo utilizado de la tarjeta.');
+          err.code = 'CREDIT_OVERPAY_NOT_ALLOWED';
+          throw err;
+        }
+      }
+
       // 4. Crear la transacción
       const currencyToUse = (account && account.currency) ? account.currency : (currency || 'COP');
       const transaction = await TransactionDBService.create({

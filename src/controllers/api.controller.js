@@ -1168,7 +1168,7 @@ class ApiController {
         try {
             const user = req.user;
             const { id } = req.params;
-            const { mark = 'completed', accountId } = req.body;
+            const { mark = 'completed', accountId, amount, currency } = req.body;
 
             const reminder = await ReminderDBService.getById(id);
             if (!reminder || reminder.user_id !== user.user_id) {
@@ -1183,8 +1183,11 @@ class ApiController {
                     return res.status(200).json({ success: true, reminder });
                 }
 
-                const amount = parseFloat(reminder.amount);
-                if (!amount || amount <= 0) {
+                const storedAmount = parseFloat(reminder.amount);
+                const providedAmount = amount !== undefined && amount !== null && amount !== '' ? parseFloat(amount) : null;
+                const finalAmount = storedAmount > 0 ? storedAmount : providedAmount;
+
+                if (!finalAmount || finalAmount <= 0) {
                     return res.status(400).json({
                         success: false,
                         error: 'El recordatorio no tiene un monto válido'
@@ -1205,15 +1208,16 @@ class ApiController {
                     account = await AccountDBService.getDefaultAccount(user.user_id);
                 }
 
+                const finalCurrency = currency || reminder.currency || 'COP';
                 const transaction = await FinanceService.createTransaction(
                     user.phone_number,
                     reminder.transaction_type || 'expense',
-                    amount,
+                    finalAmount,
                     `Recordatorio: ${reminder.message}`,
                     null,
                     account ? account.name : reminder.account_name || null,
                     account ? account.account_id : null,
-                    reminder.currency || 'COP',
+                    finalCurrency,
                     'completed'
                 );
 
@@ -1223,7 +1227,9 @@ class ApiController {
                     linked_transaction_id: transaction.transaction_id,
                     account_id: account ? account.account_id : reminder.account_id,
                     account_name: account ? account.name : reminder.account_name,
-                    status: 'sent'
+                    status: 'sent',
+                    amount: finalAmount,
+                    currency: finalCurrency
                 });
 
                 return res.status(200).json({
