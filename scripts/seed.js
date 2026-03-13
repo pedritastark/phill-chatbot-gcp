@@ -19,6 +19,7 @@ const USERS = [
   { name: 'Nicolas Garzon', phone: '+573194914403' },
   { name: 'Felipe', phone: '+573184061996' },
   { name: 'Ovach', phone: '+573214022139' },
+  { name: 'Pedra', phone: '3112841260' },
 ];
 
 const BASE_CATEGORIES = [
@@ -590,6 +591,19 @@ async function seed({ safeMode = false } = {}) {
         dueDay: 18,
         interestRate: 2.3,
         startingCash: 4600000,
+      },
+      {
+        ...USERS[3],
+        monthlyIncome: 7100000,
+        savingsGoal: 15000000,
+        bank: 'Nu',
+        creditBrand: 'Visa',
+        creditLimit: 10000000,
+        creditUsed: 1250000,
+        statementDay: 14,
+        dueDay: 24,
+        interestRate: 2.2,
+        startingCash: 6200000,
       },
     ];
 
