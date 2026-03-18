@@ -10,6 +10,7 @@ const CategoryDBService = require('./category.db.service');
 const AccountDBService = require('./account.db.service');
 const AuthDBService = require('./auth.db.service');
 const ReminderDBService = require('./reminder.db.service');
+const EmailDBService = require('./email.db.service');
 
 module.exports = {
   UserDBService,
@@ -19,4 +20,5 @@ module.exports = {
   AccountDBService,
   AuthDBService,
   ReminderDBService,
+  EmailDBService,
 };

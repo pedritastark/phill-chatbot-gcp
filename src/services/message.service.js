@@ -190,6 +190,23 @@ class MessageService {
         return await this.handleAccountSelection(user, message);
       }
 
+      // 1.5. Verificar si el usuario está respondiendo a confirmación de email transaction
+      // Esto se activa cuando detectamos "sí" o "no" y hay email transactions pendientes
+      const lowerMessage = message.toLowerCase().trim();
+      const isConfirmation = ['si', 'sí', 'yes', 'confirmar', 'ok'].includes(lowerMessage);
+      const isRejection = ['no', 'nope', 'ignorar', 'rechazar', 'cancel'].includes(lowerMessage);
+
+      if (isConfirmation || isRejection) {
+        const EmailDBService = require('./db/email.db.service');
+        const pendingEmails = await EmailDBService.getPendingEmailTransactions(user.user_id, 1);
+
+        if (pendingEmails.length > 0) {
+          // Hay emails pendientes, procesar respuesta
+          return await this.handleEmailConfirmation(user, pendingEmails[0], isConfirmation);
+        }
+        // Si no hay emails pendientes, continuar con flujo normal
+      }
+
       // 3. Obtener historial de conversación ANTES de guardar el mensaje actual
       // (últimos 10 mensajes = 5 intercambios anteriores)
       const conversationHistory = await ConversationService.getHistoryForAI(userId);
@@ -409,6 +426,72 @@ class MessageService {
 
     // Ejecutar comando
     return await this.handleFinancialCommand(command, user.phone_number);
+  }
+
+  /**
+   * Maneja la confirmación o rechazo de una transacción de email
+   * @param {Object} user - Usuario
+   * @param {Object} emailTransaction - Email transaction pendiente
+   * @param {boolean} isConfirmation - true si confirma, false si rechaza
+   * @returns {Promise<string>} - Respuesta
+   */
+  async handleEmailConfirmation(user, emailTransaction, isConfirmation) {
+    try {
+      const EmailDBService = require('./db/email.db.service');
+
+      if (isConfirmation) {
+        Logger.info(`✅ Usuario confirmó email transaction: ${emailTransaction.email_transaction_id}`);
+
+        // Crear transacción real
+        const transaction = await FinanceService.createTransaction(
+          user.phone_number,
+          emailTransaction.detected_type,
+          parseFloat(emailTransaction.detected_amount),
+          emailTransaction.detected_description,
+          emailTransaction.detected_category || 'otros',
+          null, // account - let Finance Service handle account selection
+          null, // accountId
+          emailTransaction.detected_currency || 'COP',
+          'completed',
+          'email', // source_type
+          emailTransaction.email_transaction_id // source_id
+        );
+
+        // Marcar email transaction como confirmada
+        await EmailDBService.confirmEmailTransaction(
+          emailTransaction.email_transaction_id,
+          transaction.transaction_id
+        );
+
+        const formattedAmount = new Intl.NumberFormat('es-CO', {
+          style: 'currency',
+          currency: emailTransaction.detected_currency || 'COP',
+          minimumFractionDigits: 0,
+        }).format(emailTransaction.detected_amount);
+
+        return `✅ *Transacción registrada*
+
+${emailTransaction.detected_type === 'expense' ? '💸' : '💰'} ${formattedAmount} - ${emailTransaction.detected_description}
+${emailTransaction.detected_category ? `📂 ${emailTransaction.detected_category}` : ''}
+
+¡Listo! Ya está en tus registros. 💜`;
+
+      } else {
+        Logger.info(`❌ Usuario rechazó email transaction: ${emailTransaction.email_transaction_id}`);
+
+        // Marcar como rechazada
+        await EmailDBService.rejectEmailTransaction(
+          emailTransaction.email_transaction_id,
+          'Rechazada por usuario vía WhatsApp'
+        );
+
+        return `👌 Entendido, ignoré esa transacción de email. No la registraré. 💜`;
+      }
+
+    } catch (error) {
+      Logger.error('Error procesando confirmación de email', error);
+      return 'Ups, tuve un problema procesando tu respuesta. Por favor intenta de nuevo. 💜';
+    }
   }
 
   /**

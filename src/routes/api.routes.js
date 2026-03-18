@@ -31,6 +31,9 @@ router.post('/auth/verify-otp', ApiController.verifyOTP.bind(ApiController));
 router.post('/auth/login', ApiController.login.bind(ApiController));
 router.post('/auth/refresh', ApiController.refreshToken.bind(ApiController));
 
+// Email OAuth Callback (PUBLIC - called by Google)
+router.get('/email/callback', ApiController.emailOAuthCallback.bind(ApiController));
+
 // ==========================================
 // PROTECTED ROUTES (Require authentication)
 // ==========================================
@@ -98,6 +101,16 @@ router.get('/credit-purchases', ApiController.getCreditPurchases.bind(ApiControl
 router.post('/credit-purchases', ApiController.createCreditPurchase.bind(ApiController));
 router.post('/credit-purchases/:id/payment', ApiController.recordPurchasePayment.bind(ApiController));
 router.post('/credit-purchases/payments', ApiController.recordCardPayment.bind(ApiController));
+
+// Email Integration
+router.get('/email/auth-url', ApiController.getEmailAuthUrl.bind(ApiController));
+router.post('/email/connect', ApiController.connectEmail.bind(ApiController));
+router.delete('/email/disconnect', ApiController.disconnectEmail.bind(ApiController));
+router.get('/email/status', ApiController.getEmailStatus.bind(ApiController));
+router.post('/email/sync', ApiController.syncEmail.bind(ApiController));
+router.get('/email/pending', ApiController.getPendingEmails.bind(ApiController));
+router.post('/email/pending/:id/confirm', ApiController.confirmEmailTransaction.bind(ApiController));
+router.post('/email/pending/:id/reject', ApiController.rejectEmailTransaction.bind(ApiController));
 
 // Subscriptions
 router.get('/subscriptions/current', ApiController.getCurrentSubscription.bind(ApiController));

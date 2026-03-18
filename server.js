@@ -52,6 +52,10 @@ async function startServer() {
     const SchedulerService = require('./src/services/scheduler.service');
     SchedulerService.init();
 
+    // Iniciar Email Scheduler (Gmail sync cada 30 minutos)
+    const EmailScheduler = require('./src/services/email.scheduler');
+    EmailScheduler.init();
+
   } catch (error) {
     Logger.error('Error al iniciar el servidor', error);
     process.exit(1);

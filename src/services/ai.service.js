@@ -702,6 +702,193 @@ Ojo, que ya casi tocamos el límite de salidas del mes. ¡Vamos a cerrar la sema
       throw new Error('Error al procesar tu mensaje con la IA');
     }
   }
+
+  /**
+   * Parsea un email bancario para extraer información de transacciones
+   * @param {string} emailBody - Cuerpo del email
+   * @param {string} emailSubject - Asunto del email
+   * @param {string} emailFrom - Remitente del email
+   * @returns {Promise<Object>} - Transacción parseada
+   */
+  async parseEmailTransaction(emailBody, emailSubject, emailFrom) {
+    try {
+      Logger.ai('🤖 Parseando email bancario con IA...');
+
+      const prompt = `
+      Actúa como un experto extractor de datos financieros de emails bancarios colombianos.
+
+      CONTEXTO:
+      - Remitente: ${emailFrom}
+      - Asunto: ${emailSubject}
+      - Cuerpo del email:
+      ${emailBody}
+
+      TAREA: Extraer información de la transacción financiera de este email.
+
+      REGLAS DE EXTRACCIÓN:
+
+      1. TIPO DE TRANSACCIÓN (type):
+         - 'expense': Compra, pago, cargo, débito, retiro, transferencia enviada
+         - 'income': Consignación, transferencia recibida, depósito, abono, crédito a favor
+         - 'transfer': Transferencia entre cuentas propias
+         - 'notification': Alertas sin transacción (ej: "Cupo disponible", "Estado de cuenta")
+         - 'unknown': No se puede determinar
+
+      2. MONTO (amount):
+         - Extraer el número sin símbolos (ej: "$50.000" -> 50000)
+         - Si hay múltiples montos, tomar el monto de la transacción (no saldo disponible)
+         - Debe ser un número positivo
+
+      3. MONEDA (currency):
+         - Detectar: COP, USD, EUR, MXN, ARS, CLP
+         - Si dice "pesos", "$", "COP" o nada específico -> "COP"
+         - Si dice "dólares", "USD", "US$" -> "USD"
+         - Default: "COP"
+
+      4. DESCRIPCIÓN (description):
+         - Concepto de la transacción
+         - Máximo 100 caracteres
+         - Eliminar "Compra aprobada:", "Notificación:", etc.
+         - Ejemplo: "STARBUCKS COFFEE" -> "Starbucks Coffee"
+
+      5. COMERCIO (merchant):
+         - Nombre del establecimiento/comercio si está disponible
+         - Limpiar códigos y números
+         - Ejemplo: "EXITO CALLE 80 BOG12345" -> "Éxito Calle 80"
+         - null si no aplica
+
+      6. CATEGORÍA (category):
+         - Inferir categoría basada en el comercio/descripción
+         - Opciones válidas:
+           * "alimentacion" - Restaurantes, supermercados, comida
+           * "transporte" - Uber, taxi, gasolina, parqueadero
+           * "salud" - Farmacias, médicos, seguros salud
+           * "entretenimiento" - Cine, streaming, juegos, bares
+           * "hogar" - Servicios públicos, arriendo, reparaciones
+           * "educacion" - Colegios, cursos, libros
+           * "compras" - Ropa, tecnología, general
+           * "servicios" - Suscripciones, seguros, servicios profesionales
+           * "transferencias" - Transferencias entre cuentas
+           * "otros" - No clasificable
+         - null si no se puede determinar
+
+      7. FECHA (date):
+         - Extraer fecha de la transacción del email
+         - Formato ISO 8601: "YYYY-MM-DD" o "YYYY-MM-DDTHH:mm:ss"
+         - Si solo hay día y hora pero no año/mes, usar contexto del email
+         - null si no está disponible
+
+      8. ESTADO (status):
+         - 'completed': Transacción ya procesada/aprobada
+         - 'pending': Transacción pendiente
+         - 'rejected': Transacción rechazada/declinada
+
+      9. CONFIDENCE (confidence):
+         - Calificación de confianza en la extracción (0.00 a 1.00)
+         - 0.95-1.00: Muy seguro (datos claros y completos)
+         - 0.80-0.94: Seguro (datos mayormente claros)
+         - 0.60-0.79: Moderado (algunos datos ambiguos)
+         - 0.00-0.59: Baja confianza (datos confusos o incompletos)
+
+      EJEMPLOS DE EMAILS COLOMBIANOS:
+
+      Ejemplo 1 (Bancolombia):
+      "Compra aprobada por $50.000 en STARBUCKS COFFEE el 15/03/2024 a las 10:30"
+      -> {
+        type: "expense",
+        amount: 50000,
+        currency: "COP",
+        description: "Starbucks Coffee",
+        merchant: "Starbucks Coffee",
+        category: "alimentacion",
+        date: "2024-03-15T10:30:00",
+        status: "completed",
+        confidence: 0.98
+      }
+
+      Ejemplo 2 (Nequi):
+      "Recibiste $100.000 de Juan Pérez. Concepto: Pago almuerzo"
+      -> {
+        type: "income",
+        amount: 100000,
+        currency: "COP",
+        description: "Pago almuerzo - Juan Pérez",
+        merchant: null,
+        category: "otros",
+        date: null,
+        status: "completed",
+        confidence: 0.95
+      }
+
+      Ejemplo 3 (Davivienda):
+      "Transacción rechazada por $200.000 en AMAZON.COM por fondos insuficientes"
+      -> {
+        type: "expense",
+        amount: 200000,
+        currency: "COP",
+        description: "Amazon.com",
+        merchant: "Amazon",
+        category: "compras",
+        date: null,
+        status: "rejected",
+        confidence: 0.92
+      }
+
+      OUTPUT JSON (OBLIGATORIO):
+      {
+        "type": "expense" | "income" | "transfer" | "notification" | "unknown",
+        "amount": number,
+        "currency": "COP" | "USD" | "EUR",
+        "description": "string (max 100 chars)",
+        "merchant": "string" | null,
+        "category": "category_name" | null,
+        "date": "YYYY-MM-DD" | "YYYY-MM-DDTHH:mm:ss" | null,
+        "status": "completed" | "pending" | "rejected",
+        "confidence": number (0.00 to 1.00)
+      }
+
+      IMPORTANTE:
+      - Responde SOLO con el JSON, sin texto adicional
+      - Si no puedes extraer datos, devuelve type: "unknown" y confidence baja
+      - Sé conservador con la confianza - mejor subestimar que sobreestimar
+      `;
+
+      const response = await this.client.chat.completions.create({
+        model: config.openai.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un extractor experto de datos financieros de emails bancarios colombianos. Respondes EXCLUSIVAMENTE con JSON válido.'
+          },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0, // Determinístico para parsing
+        response_format: { type: 'json_object' }
+      });
+
+      const parsed = JSON.parse(response.choices[0].message.content);
+
+      Logger.success(`✅ Email parseado: ${parsed.type} - $${parsed.amount} - Confidence: ${parsed.confidence}`);
+
+      return parsed;
+    } catch (error) {
+      Logger.error('❌ Error parseando email bancario', error);
+
+      // Fallback seguro
+      return {
+        type: 'unknown',
+        amount: 0,
+        currency: 'COP',
+        description: 'Error al procesar email',
+        merchant: null,
+        category: null,
+        date: null,
+        status: 'pending',
+        confidence: 0.0,
+        error: error.message
+      };
+    }
+  }
 }
 
 module.exports = new AIService();

@@ -2424,22 +2424,68 @@ class ApiController {
             const limit = parseInt(req.query.limit) || 50;
 
             const ConversationDBService = require('../services/db/conversation.db.service');
-            const messages = await ConversationDBService.getConversationHistory(
-                user.phone_number,
+            const EmailDBService = require('../services/db/email.db.service');
+
+            // Get recent messages for the user
+            const messages = await ConversationDBService.getRecentMessagesForAI(
+                user.user_id,
                 limit
             );
 
             // Format messages for web display
-            const formattedMessages = messages.map(msg => ({
-                id: msg.message_id,
-                type: msg.sender === 'user' ? 'user' : 'bot',
+            const formattedMessages = messages.map((msg, index) => ({
+                id: msg.message_id || `msg-${Date.now()}-${index}`,
+                type: msg.role === 'user' ? 'user' : 'bot',
                 text: msg.content,
                 timestamp: msg.created_at
             }));
 
+            // Check for pending email transactions and add notifications
+            const pendingEmails = await EmailDBService.getPendingEmailTransactions(user.user_id, 5);
+
+            if (pendingEmails.length > 0) {
+                Logger.info(`📧 Found ${pendingEmails.length} pending email transactions for user ${user.user_id}`);
+
+                // Add notification messages for each pending transaction
+                pendingEmails.forEach((emailTx, index) => {
+                    const formattedAmount = new Intl.NumberFormat('es-CO', {
+                        style: 'currency',
+                        currency: emailTx.detected_currency || 'COP',
+                        minimumFractionDigits: 0,
+                    }).format(emailTx.detected_amount);
+
+                    const date = new Date(emailTx.email_date);
+                    const formattedDate = new Intl.DateTimeFormat('es-CO', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        timeZone: 'America/Bogota',
+                    }).format(date);
+
+                    const icon = emailTx.detected_type === 'expense' ? '💸' : '💰';
+                    const typeText = emailTx.detected_type === 'expense' ? 'Gasto' : 'Ingreso';
+
+                    const notificationMessage = `📧 Nueva transacción detectada de tu email:
+
+${icon} ${typeText}: ${formattedAmount}
+🏪 ${emailTx.detected_description || 'Sin descripción'}
+📅 ${formattedDate}
+🏦 De: ${emailTx.email_from}
+${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : ''}`;
+
+                    formattedMessages.push({
+                        id: `pending-${emailTx.email_transaction_id}`,
+                        type: 'bot',
+                        text: notificationMessage,
+                        timestamp: emailTx.created_at
+                    });
+                });
+            }
+
             return res.status(200).json({
                 success: true,
-                messages: formattedMessages
+                messages: formattedMessages,
+                pendingCount: pendingEmails.length
             });
 
         } catch (error) {
@@ -2969,6 +3015,387 @@ class ApiController {
             return res.status(500).json({
                 success: false,
                 error: 'Error al registrar el pago'
+            });
+        }
+    }
+
+    // ==========================================
+    // EMAIL INTEGRATION ENDPOINTS
+    // ==========================================
+
+    /**
+     * POST /api/v1/email/connect
+     * Initiates Gmail OAuth2 flow
+     */
+    async connectEmail(req, res) {
+        try {
+            const user = req.user;
+            const { authorizationCode, emailAddress } = req.body;
+
+            if (!authorizationCode || !emailAddress) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'authorizationCode y emailAddress son requeridos'
+                });
+            }
+
+            const EmailService = require('../services/email.service');
+            const integration = await EmailService.connectGmail(
+                user.user_id,
+                authorizationCode,
+                emailAddress
+            );
+
+            Logger.success(`✅ Gmail conectado: ${emailAddress} para user ${user.user_id}`);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Gmail conectado exitosamente',
+                integration: {
+                    id: integration.integration_id,
+                    emailAddress: integration.email_address,
+                    provider: integration.provider,
+                    isActive: integration.is_active,
+                    createdAt: integration.created_at
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en connectEmail', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al conectar Gmail: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/v1/email/auth-url
+     * Returns the OAuth2 authorization URL
+     */
+    async getEmailAuthUrl(req, res) {
+        try {
+            const user = req.user;
+            const { getAuthUrl } = require('../config/gmail.config');
+
+            // Use user_id as state for CSRF protection
+            const authUrl = getAuthUrl(user.user_id);
+
+            return res.status(200).json({
+                success: true,
+                authUrl
+            });
+
+        } catch (error) {
+            Logger.error('Error en getEmailAuthUrl', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al generar URL de autorización'
+            });
+        }
+    }
+
+    /**
+     * GET /api/v1/email/callback
+     * OAuth2 callback endpoint (called by Google after authorization)
+     */
+    async emailOAuthCallback(req, res) {
+        try {
+            const { code, state, error: oauthError } = req.query;
+
+            // Frontend URL (from env or default)
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+            // Check for OAuth error
+            if (oauthError) {
+                Logger.error(`OAuth error: ${oauthError}`);
+                return res.redirect(`${frontendUrl}/dashboard/settings?email_error=oauth_denied`);
+            }
+
+            if (!code) {
+                Logger.error('No authorization code received');
+                return res.redirect(`${frontendUrl}/dashboard/settings?email_error=no_code`);
+            }
+
+            // State contains user_id - in production, verify this matches session
+            const userId = state;
+
+            if (!userId) {
+                Logger.error('No user_id in OAuth state');
+                return res.redirect(`${frontendUrl}/dashboard/settings?email_error=invalid_state`);
+            }
+
+            // Get user to extract email address
+            const UserDBService = require('../services/db/user.db.service');
+            const user = await UserDBService.findById(userId);
+
+            if (!user) {
+                Logger.error(`User not found: ${userId}`);
+                return res.redirect(`${frontendUrl}/dashboard/settings?email_error=user_not_found`);
+            }
+
+            // Extract email from user data or use a default
+            // Ideally, we should ask Google for the email address from the OAuth response
+            const emailAddress = user.email || 'user@gmail.com';
+
+            // Connect Gmail
+            const EmailService = require('../services/email.service');
+            await EmailService.connectGmail(userId, code, emailAddress);
+
+            Logger.success(`✅ Gmail OAuth callback successful for user ${userId}`);
+
+            // Redirect back to frontend settings with success flag
+            return res.redirect(`${frontendUrl}/dashboard/settings?email_connected=true`);
+
+        } catch (error) {
+            Logger.error('Error en emailOAuthCallback', error);
+
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            return res.redirect(`${frontendUrl}/dashboard/settings?email_error=connection_failed`);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/email/disconnect
+     * Disconnects Gmail integration
+     */
+    async disconnectEmail(req, res) {
+        try {
+            const user = req.user;
+
+            const EmailService = require('../services/email.service');
+            await EmailService.disconnectGmail(user.user_id);
+
+            Logger.success(`✅ Gmail desconectado para user ${user.user_id}`);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Gmail desconectado correctamente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en disconnectEmail', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al desconectar Gmail'
+            });
+        }
+    }
+
+    /**
+     * GET /api/v1/email/status
+     * Get Gmail integration status for user
+     */
+    async getEmailStatus(req, res) {
+        try {
+            const user = req.user;
+
+            const EmailService = require('../services/email.service');
+            const status = await EmailService.getIntegrationStatus(user.user_id);
+
+            return res.status(200).json({
+                success: true,
+                ...status
+            });
+
+        } catch (error) {
+            Logger.error('Error en getEmailStatus', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener estado de integración'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/email/sync
+     * Manually trigger email sync
+     */
+    async syncEmail(req, res) {
+        try {
+            const user = req.user;
+
+            const EmailService = require('../services/email.service');
+            const result = await EmailService.syncEmails(user.user_id);
+
+            return res.status(200).json({
+                success: result.success,
+                message: result.message || 'Sincronización completada',
+                ...result
+            });
+
+        } catch (error) {
+            Logger.error('Error en syncEmail', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al sincronizar emails'
+            });
+        }
+    }
+
+    /**
+     * GET /api/v1/email/pending
+     * Get pending email transactions
+     */
+    async getPendingEmails(req, res) {
+        try {
+            const user = req.user;
+            const limit = parseInt(req.query.limit) || 10;
+
+            const EmailService = require('../services/email.service');
+            const pending = await EmailService.getPendingTransactions(user.user_id, limit);
+
+            const formatted = pending.map(et => ({
+                id: et.email_transaction_id,
+                from: et.email_from,
+                subject: et.email_subject,
+                date: et.email_date,
+                type: et.detected_type,
+                amount: parseFloat(et.detected_amount),
+                currency: et.detected_currency,
+                description: et.detected_description,
+                merchant: et.detected_merchant,
+                category: et.detected_category,
+                confidence: parseFloat(et.confidence_score),
+                status: et.status
+            }));
+
+            return res.status(200).json({
+                success: true,
+                pending: formatted,
+                count: formatted.length
+            });
+
+        } catch (error) {
+            Logger.error('Error en getPendingEmails', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al obtener emails pendientes'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/email/pending/:id/confirm
+     * Confirm email transaction (creates real transaction)
+     */
+    async confirmEmailTransaction(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+
+            const EmailDBService = require('../services/db/email.db.service');
+
+            // Get email transaction
+            const emailTransaction = await EmailDBService.getEmailTransactionById(id);
+
+            if (!emailTransaction) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Transacción de email no encontrada'
+                });
+            }
+
+            if (emailTransaction.user_id !== user.user_id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'No tienes permiso para confirmar esta transacción'
+                });
+            }
+
+            if (emailTransaction.status !== 'pending') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Esta transacción ya fue procesada'
+                });
+            }
+
+            // Create real transaction
+            const FinanceService = require('../services/finance.service');
+            const transaction = await FinanceService.createTransaction(
+                user.phone_number,
+                emailTransaction.detected_type,
+                parseFloat(emailTransaction.detected_amount),
+                emailTransaction.detected_description,
+                emailTransaction.detected_category || 'otros',
+                null, // Let user select account
+                null,
+                emailTransaction.detected_currency,
+                'completed',
+                'email', // source_type
+                emailTransaction.email_transaction_id // source_id
+            );
+
+            // Mark email transaction as confirmed
+            await EmailDBService.confirmEmailTransaction(id, transaction.transaction_id);
+
+            Logger.success(`✅ Email transaction confirmed: ${id} → ${transaction.transaction_id}`);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Transacción confirmada y registrada',
+                transaction: {
+                    id: transaction.transaction_id,
+                    type: transaction.type,
+                    amount: parseFloat(transaction.amount),
+                    description: transaction.description,
+                    category: transaction.category_name
+                }
+            });
+
+        } catch (error) {
+            Logger.error('Error en confirmEmailTransaction', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al confirmar transacción'
+            });
+        }
+    }
+
+    /**
+     * POST /api/v1/email/pending/:id/reject
+     * Reject email transaction
+     */
+    async rejectEmailTransaction(req, res) {
+        try {
+            const user = req.user;
+            const { id } = req.params;
+            const { reason } = req.body;
+
+            const EmailDBService = require('../services/db/email.db.service');
+
+            // Get email transaction
+            const emailTransaction = await EmailDBService.getEmailTransactionById(id);
+
+            if (!emailTransaction) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Transacción de email no encontrada'
+                });
+            }
+
+            if (emailTransaction.user_id !== user.user_id) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'No tienes permiso para rechazar esta transacción'
+                });
+            }
+
+            // Mark as rejected
+            await EmailDBService.rejectEmailTransaction(id, reason || 'Rechazada por usuario');
+
+            Logger.info(`ℹ️ Email transaction rejected: ${id}`);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Transacción rechazada correctamente'
+            });
+
+        } catch (error) {
+            Logger.error('Error en rejectEmailTransaction', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error al rechazar transacción'
             });
         }
     }
