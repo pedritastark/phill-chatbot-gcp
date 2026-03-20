@@ -3328,7 +3328,7 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
                 }
             }
 
-            // Create real transaction
+            // Create real transaction with email date
             const FinanceService = require('../services/finance.service');
             const transaction = await FinanceService.createTransaction(
                 user.phone_number,
@@ -3338,10 +3338,9 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
                 emailTransaction.detected_category || 'otros',
                 null, // accountName
                 defaultAccount.account_id, // Use default account
-                emailTransaction.detected_currency,
+                emailTransaction.detected_currency || 'COP',
                 'completed',
-                'email', // source_type
-                emailTransaction.email_transaction_id // source_id
+                emailTransaction.email_date ? new Date(emailTransaction.email_date) : new Date() // Use email date
             );
 
             // Mark email transaction as confirmed
