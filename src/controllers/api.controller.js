@@ -3312,13 +3312,20 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
 
             // Get user's default account for the transaction
             const AccountDBService = require('../services/db/account.db.service');
-            const defaultAccount = await AccountDBService.getDefaultAccount(user.user_id);
+            let defaultAccount = await AccountDBService.getDefaultAccount(user.user_id);
 
+            // If no default account, use the first available account
             if (!defaultAccount) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'No tienes cuentas configuradas. Crea una cuenta primero.'
-                });
+                const allAccounts = await AccountDBService.getAccountsByUser(user.user_id);
+                if (allAccounts && allAccounts.length > 0) {
+                    defaultAccount = allAccounts[0]; // Use first account as fallback
+                    Logger.info(`No default account found, using first account: ${defaultAccount.name}`);
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'No tienes cuentas configuradas. Crea una cuenta primero.'
+                    });
+                }
             }
 
             // Create real transaction
