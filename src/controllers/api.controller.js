@@ -3310,6 +3310,17 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
                 });
             }
 
+            // Get user's default account for the transaction
+            const AccountDBService = require('../services/db/account.db.service');
+            const defaultAccount = await AccountDBService.getDefaultAccount(user.user_id);
+
+            if (!defaultAccount) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No tienes cuentas configuradas. Crea una cuenta primero.'
+                });
+            }
+
             // Create real transaction
             const FinanceService = require('../services/finance.service');
             const transaction = await FinanceService.createTransaction(
@@ -3318,8 +3329,8 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
                 parseFloat(emailTransaction.detected_amount),
                 emailTransaction.detected_description,
                 emailTransaction.detected_category || 'otros',
-                null, // Let user select account
-                null,
+                null, // accountName
+                defaultAccount.account_id, // Use default account
                 emailTransaction.detected_currency,
                 'completed',
                 'email', // source_type
