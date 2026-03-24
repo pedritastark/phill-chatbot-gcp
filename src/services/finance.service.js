@@ -525,6 +525,131 @@ class FinanceService {
       return [];
     }
   }
+
+  /**
+   * Registrar una transferencia entre cuentas
+   * @param {string} userPhone - Teléfono del usuario
+   * @param {Object} transferData - { amount, from_account, to_account }
+   * @returns {Promise<Object>}
+   */
+  async registerTransfer(userPhone, transferData) {
+    try {
+      const user = await UserDBService.findByPhone(userPhone);
+      if (!user) {
+        throw new Error('Usuario no encontrado');
+      }
+
+      const { amount, from_account, to_account } = transferData;
+
+      // Buscar cuenta de origen
+      const fromAcc = await AccountDBService.findByName(from_account, user.user_id);
+      if (!fromAcc) {
+        throw new Error(`No encontré la cuenta de origen "${from_account}"`);
+      }
+
+      // Buscar cuenta de destino
+      const toAcc = await AccountDBService.findByName(to_account, user.user_id);
+      if (!toAcc) {
+        throw new Error(`No encontré la cuenta de destino "${to_account}"`);
+      }
+
+      // Verificar que haya suficiente saldo
+      if (parseFloat(fromAcc.balance) < parseFloat(amount)) {
+        throw new Error(`Saldo insuficiente en ${from_account}`);
+      }
+
+      // Realizar transferencia (actualizar balances)
+      await AccountDBService.setBalance(fromAcc.account_id, parseFloat(fromAcc.balance) - parseFloat(amount));
+      await AccountDBService.setBalance(toAcc.account_id, parseFloat(toAcc.balance) + parseFloat(amount));
+
+      // Registrar transacciones para historial
+      await TransactionDBService.create({
+        user_id: user.user_id,
+        account_id: fromAcc.account_id,
+        type: 'expense',
+        amount,
+        description: `Transferencia a ${to_account}`,
+        category_id: null,
+        status: 'completed'
+      });
+
+      await TransactionDBService.create({
+        user_id: user.user_id,
+        account_id: toAcc.account_id,
+        type: 'income',
+        amount,
+        description: `Transferencia desde ${from_account}`,
+        category_id: null,
+        status: 'completed'
+      });
+
+      Logger.success(`💸 Transferencia: $${amount} de ${from_account} a ${to_account}`);
+
+      return {
+        success: true,
+        from_account: from_account,
+        to_account: to_account,
+        amount: amount
+      };
+
+    } catch (error) {
+      Logger.error('Error registrando transferencia', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Ajustar balance de una cuenta
+   * @param {string} userPhone - Teléfono del usuario
+   * @param {string} accountName - Nombre de la cuenta
+   * @param {number} newBalance - Nuevo balance
+   * @returns {Promise<Object>}
+   */
+  async adjustBalance(userPhone, accountName, newBalance) {
+    try {
+      const user = await UserDBService.findByPhone(userPhone);
+      if (!user) {
+        throw new Error('Usuario no encontrado');
+      }
+
+      // Buscar cuenta
+      const account = await AccountDBService.findByName(accountName, user.user_id);
+      if (!account) {
+        throw new Error(`No encontré la cuenta "${accountName}"`);
+      }
+
+      const oldBalance = parseFloat(account.balance);
+      const difference = parseFloat(newBalance) - oldBalance;
+
+      // Actualizar balance
+      await AccountDBService.setBalance(account.account_id, parseFloat(newBalance));
+
+      // Crear transacción de ajuste
+      await TransactionDBService.create({
+        user_id: user.user_id,
+        account_id: account.account_id,
+        type: difference >= 0 ? 'income' : 'expense',
+        amount: Math.abs(difference),
+        description: `Ajuste de balance (${oldBalance} → ${newBalance})`,
+        category_id: null,
+        status: 'completed'
+      });
+
+      Logger.success(`⚙️ Balance ajustado: ${accountName} = $${newBalance}`);
+
+      return {
+        success: true,
+        account: accountName,
+        old_balance: oldBalance,
+        new_balance: newBalance,
+        difference: difference
+      };
+
+    } catch (error) {
+      Logger.error('Error ajustando balance', error);
+      throw error;
+    }
+  }
 }
 
 // --- SNIPPET DE PRUEBA MANUAL ---

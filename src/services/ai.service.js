@@ -511,6 +511,178 @@ class AIService {
             required: ["category_name"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_savings_goal",
+          description: "Crear una nueva meta de ahorro para el usuario. Usar cuando el usuario quiera ahorrar para algo específico.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Nombre de la meta (ej: 'Viaje a Japón', 'Fondo de emergencia', 'MacBook Pro')"
+              },
+              target_amount: {
+                type: "number",
+                description: "Monto objetivo a ahorrar"
+              },
+              description: {
+                type: "string",
+                description: "Descripción opcional de la meta"
+              },
+              target_date: {
+                type: "string",
+                description: "Fecha objetivo (formato YYYY-MM-DD). Opcional."
+              },
+              category: {
+                type: "string",
+                enum: ["emergency", "travel", "education", "purchase", "investment", "general"],
+                description: "Categoría de la meta"
+              },
+              priority: {
+                type: "string",
+                enum: ["low", "medium", "high"],
+                description: "Prioridad de la meta. Default: 'medium'"
+              }
+            },
+            required: ["name", "target_amount"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "deposit_to_goal",
+          description: "Depositar dinero a una meta de ahorro existente",
+          parameters: {
+            type: "object",
+            properties: {
+              goal_name: {
+                type: "string",
+                description: "Nombre de la meta a la que se va a depositar"
+              },
+              amount: {
+                type: "number",
+                description: "Monto a depositar"
+              },
+              from_account: {
+                type: "string",
+                description: "Cuenta de origen del dinero (ej: 'Nequi', 'Banco'). SOLO incluir si el usuario menciona explícitamente de qué cuenta."
+              }
+            },
+            required: ["goal_name", "amount"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_debt",
+          description: "Registrar una nueva deuda, préstamo o pasivo que el usuario debe pagar",
+          parameters: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "Nombre de la deuda (ej: 'Tarjeta Visa', 'Préstamo banco', 'Deuda con Juan')"
+              },
+              total_amount: {
+                type: "number",
+                description: "Monto total de la deuda"
+              },
+              creditor: {
+                type: "string",
+                description: "A quién se le debe (banco, persona, institución)"
+              },
+              interest_rate: {
+                type: "number",
+                description: "Tasa de interés anual (%). Opcional."
+              },
+              minimum_payment: {
+                type: "number",
+                description: "Pago mínimo mensual. Opcional."
+              },
+              payment_day: {
+                type: "integer",
+                description: "Día del mes de pago (1-31). Opcional."
+              },
+              debt_type: {
+                type: "string",
+                enum: ["personal", "credit_card", "mortgage", "student_loan", "car_loan", "other"],
+                description: "Tipo de deuda"
+              },
+              notes: {
+                type: "string",
+                description: "Notas adicionales sobre la deuda. Opcional."
+              }
+            },
+            required: ["name", "total_amount"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "pay_debt",
+          description: "Registrar un pago hacia una deuda existente",
+          parameters: {
+            type: "object",
+            properties: {
+              debt_name: {
+                type: "string",
+                description: "Nombre de la deuda a pagar"
+              },
+              amount: {
+                type: "number",
+                description: "Monto del pago"
+              },
+              from_account: {
+                type: "string",
+                description: "Cuenta desde donde se realiza el pago (ej: 'Nequi', 'Banco'). SOLO incluir si el usuario menciona explícitamente."
+              }
+            },
+            required: ["debt_name", "amount"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_credit_purchase",
+          description: "Registrar una compra en cuotas o a crédito (ej: celular en 12 cuotas, refrigerador en 6 cuotas)",
+          parameters: {
+            type: "object",
+            properties: {
+              description: {
+                type: "string",
+                description: "Descripción de la compra (ej: 'iPhone 15 Pro', 'Nevera Samsung')"
+              },
+              total_amount: {
+                type: "number",
+                description: "Monto total de la compra"
+              },
+              installments: {
+                type: "integer",
+                description: "Número de cuotas (meses)"
+              },
+              account: {
+                type: "string",
+                description: "Tarjeta de crédito o cuenta con la que se hizo la compra. SOLO incluir si el usuario lo menciona."
+              },
+              interest_rate: {
+                type: "number",
+                description: "Tasa de interés (%). Default: 0 si no se especifica."
+              },
+              notes: {
+                type: "string",
+                description: "Notas adicionales. Opcional."
+              }
+            },
+            required: ["description", "total_amount", "installments"]
+          }
+        }
       }
     ];
   }
@@ -529,11 +701,17 @@ class AIService {
      - SOLO si X parece una cuenta financiera (Banco, Nequi, Bolsillo) y NO existe: PREGUNTA si quiere crearla.
 
    * **REGLA DE ORO:** Sé BREVE. MÁXIMO 2 frases. NO repitas lo que el usuario ya sabe.
-   * **PERSONALIDAD:** Eres un Coach Financiero, no un contador aburrido. Usa emojis. Sé amable y asertivo.
+   * **PERSONALIDAD:** Eres un Coach Financiero completo. Ayudas con:
+     - 💰 Gastos e ingresos
+     - 🏦 Cuentas y transferencias
+     - 🎯 Metas de ahorro
+     - 💳 Deudas y compras en cuotas
+     - ⏰ Recordatorios
+     - 📊 Reportes y analytics
    * **TONO:** "Phill" es tu nombre. Habla como un amigo amable y experto.
 
    SIEMPRE responde en el idioma del usuario (Español).
-   * **Misión:** Que el usuario domine su dinero (Banco y Efectivo) y se sienta genial haciéndolo.
+   * **Misión:** Que el usuario domine su dinero y alcance sus metas financieras sintiéndose genial haciéndolo.
 
 2. **TONO Y ESTILO (CRÍTICO):**
    * **Asertividad:** No pides permiso para ayudar. Tomas la iniciativa.
@@ -572,6 +750,14 @@ class AIService {
    * **Recordatorios:** Usa 'set_reminder'.
    * **Reportes:** Usa 'generate_report'.
    * **Consultas:** Usa 'get_category_spending' si preguntan por categorías.
+   * **Metas de Ahorro:**
+     - Si quiere ahorrar para algo: 'create_savings_goal'
+     - Si quiere guardar dinero en una meta: 'deposit_to_goal'
+   * **Deudas:**
+     - Si tiene una deuda o préstamo: 'create_debt'
+     - Si paga una cuota o abono: 'pay_debt'
+   * **Compras a Crédito:**
+     - Si compra algo en cuotas: 'create_credit_purchase'
 
 5. **EDUCADOR, NO ASESOR (Legal):**
    * Eres un educador. Explicas conceptos (ETFs, Ahorro).

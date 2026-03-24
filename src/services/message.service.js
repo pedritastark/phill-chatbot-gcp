@@ -100,7 +100,7 @@ class MessageService {
           });
         }
 
-        const welcomeMessage = "¡Hola! 👋 Soy Phill, tu asistente financiero.\n\nPuedo ayudarte a:\n💰 Registrar gastos e ingresos\n📊 Ver resúmenes financieros\n🎯 Crear metas de ahorro\n⏰ Gestionar recordatorios\n\n¿En qué te ayudo hoy?";
+        const welcomeMessage = "¡Hola! 👋 Soy Phill, tu asistente financiero.\n\nPuedo ayudarte a:\n💰 Registrar gastos e ingresos\n🏦 Gestionar cuentas y transferencias\n🎯 Crear y alcanzar metas de ahorro\n💳 Controlar deudas y compras en cuotas\n⏰ Programar recordatorios\n📊 Ver reportes y análisis\n\n¿En qué te ayudo hoy? 💜";
         await ConversationService.addAssistantMessage(userId, welcomeMessage);
         return welcomeMessage;
       }
@@ -281,6 +281,20 @@ class MessageService {
           toolResponse = await this.handleCreateAccountCommand(user, toolCall);
         } else if (functionName === 'get_category_spending') {
           toolResponse = await this.handleCategorySpendingCommand(functionArgs, userId);
+        } else if (functionName === 'register_transfer') {
+          toolResponse = await this.handleTransferCommand(functionArgs, userId);
+        } else if (functionName === 'adjust_balance') {
+          toolResponse = await this.handleAdjustBalanceCommand(functionArgs, userId);
+        } else if (functionName === 'create_savings_goal') {
+          toolResponse = await this.handleCreateGoalCommand(functionArgs, userId);
+        } else if (functionName === 'deposit_to_goal') {
+          toolResponse = await this.handleDepositToGoalCommand(functionArgs, userId);
+        } else if (functionName === 'create_debt') {
+          toolResponse = await this.handleCreateDebtCommand(functionArgs, userId);
+        } else if (functionName === 'pay_debt') {
+          toolResponse = await this.handlePayDebtCommand(functionArgs, userId);
+        } else if (functionName === 'create_credit_purchase') {
+          toolResponse = await this.handleCreateCreditPurchaseCommand(functionArgs, userId);
         } else {
           Logger.warning(`⚠️ Herramienta desconocida: ${functionName}`);
           toolResponse = 'Lo siento, intenté hacer algo que no sé cómo hacer. 💜';
@@ -824,6 +838,306 @@ ${emailTransaction.detected_category ? `📂 ${emailTransaction.detected_categor
     } catch (error) {
       Logger.error('Error generando reporte visual', error);
       return 'Tuve un problema creando tu imagen. Intenta con el reporte PDF normal. 💜';
+    }
+  }
+
+  /**
+   * Manejar comando de ajuste de balance
+   */
+  async handleAdjustBalanceCommand(args, userId) {
+    try {
+      const FinanceService = require('./finance.service');
+      const { account, new_balance } = args;
+
+      const result = await FinanceService.adjustBalance(userId, account, new_balance);
+
+      return `✅ Balance ajustado: ${account} ahora tiene $${new Intl.NumberFormat('es-CO').format(new_balance)}. 💜`;
+    } catch (error) {
+      Logger.error('Error en handleAdjustBalanceCommand', error);
+      return `No pude ajustar el balance. ${error.message} 💜`;
+    }
+  }
+
+  /**
+   * Manejar creación de meta de ahorro
+   */
+  async handleCreateGoalCommand(args, userId) {
+    try {
+      const GoalDBService = require('./db/goal.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhone(userId);
+      if (!user) throw new Error('Usuario no encontrado');
+
+      const {
+        name,
+        target_amount,
+        description = null,
+        target_date = null,
+        category = 'general',
+        priority = 'medium'
+      } = args;
+
+      const goal = await GoalDBService.create({
+        user_id: user.user_id,
+        name,
+        target_amount,
+        description,
+        target_date,
+        category,
+        priority
+      });
+
+      let response = `🎯 Meta creada: "${name}" por $${new Intl.NumberFormat('es-CO').format(target_amount)}`;
+
+      if (target_date) {
+        const date = new Date(target_date);
+        response += ` para ${date.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })}`;
+      }
+
+      response += '. ¡A ahorrar se ha dicho! 🔥💜';
+
+      return response;
+    } catch (error) {
+      Logger.error('Error en handleCreateGoalCommand', error);
+      return `No pude crear la meta. ${error.message} 💜`;
+    }
+  }
+
+  /**
+   * Manejar depósito a meta de ahorro
+   */
+  async handleDepositToGoalCommand(args, userId) {
+    try {
+      const GoalDBService = require('./db/goal.db.service');
+      const AccountDBService = require('./db/account.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhone(userId);
+      if (!user) throw new Error('Usuario no encontrado');
+
+      const { goal_name, amount, from_account } = args;
+
+      // Buscar meta por nombre
+      const goal = await GoalDBService.findByName(goal_name, user.user_id);
+      if (!goal) {
+        return `No encontré la meta "${goal_name}". ¿Quieres crearla primero? 💜`;
+      }
+
+      // Buscar cuenta de origen si se especificó
+      let fromAccountId = null;
+      if (from_account) {
+        const account = await AccountDBService.findByName(from_account, user.user_id);
+        if (!account) {
+          return `No encontré la cuenta "${from_account}". ¿De qué cuenta quieres depositar? 💜`;
+        }
+        fromAccountId = account.account_id;
+      }
+
+      const updatedGoal = await GoalDBService.deposit(
+        goal.goal_id,
+        user.user_id,
+        amount,
+        fromAccountId
+      );
+
+      const progress = (parseFloat(updatedGoal.current_amount) / parseFloat(updatedGoal.target_amount) * 100).toFixed(1);
+
+      let response = `💰 ¡Depósito registrado! +$${new Intl.NumberFormat('es-CO').format(amount)} a "${goal_name}"`;
+      response += `\n\nProgreso: $${new Intl.NumberFormat('es-CO').format(updatedGoal.current_amount)} / $${new Intl.NumberFormat('es-CO').format(updatedGoal.target_amount)} (${progress}%)`;
+
+      if (parseFloat(updatedGoal.current_amount) >= parseFloat(updatedGoal.target_amount)) {
+        response += '\n\n🎉 ¡Meta completada! Eres increíble. 🔥💜';
+      } else {
+        response += ' 🔥💜';
+      }
+
+      return response;
+    } catch (error) {
+      Logger.error('Error en handleDepositToGoalCommand', error);
+      return `No pude registrar el depósito. ${error.message} 💜`;
+    }
+  }
+
+  /**
+   * Manejar creación de deuda
+   */
+  async handleCreateDebtCommand(args, userId) {
+    try {
+      const DebtDBService = require('./db/debt.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhone(userId);
+      if (!user) throw new Error('Usuario no encontrado');
+
+      const {
+        name,
+        total_amount,
+        creditor = null,
+        interest_rate = null,
+        minimum_payment = null,
+        payment_day = null,
+        debt_type = 'personal',
+        notes = null
+      } = args;
+
+      const debt = await DebtDBService.create({
+        user_id: user.user_id,
+        name,
+        total_amount,
+        creditor,
+        interest_rate,
+        minimum_payment,
+        payment_day,
+        debt_type,
+        notes
+      });
+
+      let response = `📋 Deuda registrada: "${name}" por $${new Intl.NumberFormat('es-CO').format(total_amount)}`;
+
+      if (creditor) response += ` con ${creditor}`;
+      if (minimum_payment) {
+        response += `\n💳 Pago mínimo mensual: $${new Intl.NumberFormat('es-CO').format(minimum_payment)}`;
+      }
+
+      response += '\n\nLo importante es que ya está rastreada. ¡Vamos a liquidarla! 💪💜';
+
+      return response;
+    } catch (error) {
+      Logger.error('Error en handleCreateDebtCommand', error);
+      return `No pude registrar la deuda. ${error.message} 💜`;
+    }
+  }
+
+  /**
+   * Manejar pago de deuda
+   */
+  async handlePayDebtCommand(args, userId) {
+    try {
+      const DebtDBService = require('./db/debt.db.service');
+      const AccountDBService = require('./db/account.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhone(userId);
+      if (!user) throw new Error('Usuario no encontrado');
+
+      const { debt_name, amount, from_account } = args;
+
+      // Buscar deuda por nombre
+      const debt = await DebtDBService.findByName(debt_name, user.user_id);
+      if (!debt) {
+        return `No encontré la deuda "${debt_name}". ¿Quieres registrarla primero? 💜`;
+      }
+
+      // Buscar cuenta de origen si se especificó
+      let fromAccountId = null;
+      if (from_account) {
+        const account = await AccountDBService.findByName(from_account, user.user_id);
+        if (!account) {
+          return `No encontré la cuenta "${from_account}". ¿De qué cuenta pagas? 💜`;
+        }
+        fromAccountId = account.account_id;
+      }
+
+      const updatedDebt = await DebtDBService.recordPayment(
+        debt.debt_id,
+        user.user_id,
+        amount,
+        fromAccountId
+      );
+
+      const remaining = parseFloat(updatedDebt.remaining_amount);
+      const progress = ((parseFloat(updatedDebt.total_amount) - remaining) / parseFloat(updatedDebt.total_amount) * 100).toFixed(1);
+
+      let response = `💸 ¡Pago registrado! -$${new Intl.NumberFormat('es-CO').format(amount)} de "${debt_name}"`;
+
+      if (remaining <= 0) {
+        response += '\n\n🎉 ¡Deuda liquidada! Eres libre. 🔥💜';
+      } else {
+        response += `\n\nRestante: $${new Intl.NumberFormat('es-CO').format(remaining)} (${progress}% pagado) 💪💜`;
+      }
+
+      return response;
+    } catch (error) {
+      Logger.error('Error en handlePayDebtCommand', error);
+      return `No pude registrar el pago. ${error.message} 💜`;
+    }
+  }
+
+  /**
+   * Manejar creación de compra a crédito
+   */
+  async handleCreateCreditPurchaseCommand(args, userId) {
+    try {
+      const CreditPurchaseDBService = require('./db/credit-purchase.db.service');
+      const AccountDBService = require('./db/account.db.service');
+      const UserDBService = require('./db/user.db.service');
+
+      const user = await UserDBService.findByPhone(userId);
+      if (!user) throw new Error('Usuario no encontrado');
+
+      const {
+        description,
+        total_amount,
+        installments,
+        account = null,
+        interest_rate = 0,
+        notes = null
+      } = args;
+
+      // Buscar cuenta si se especificó
+      let accountId = null;
+      if (account) {
+        const foundAccount = await AccountDBService.findByName(account, user.user_id);
+        if (foundAccount) {
+          accountId = foundAccount.account_id;
+        }
+      }
+
+      // Si no se encontró cuenta, buscar la primera tarjeta de crédito o crear una genérica
+      if (!accountId) {
+        const accounts = await AccountDBService.getByUserId(user.user_id);
+        const creditCard = accounts.find(a => a.type === 'credit_card');
+        if (creditCard) {
+          accountId = creditCard.account_id;
+        } else {
+          // Crear cuenta genérica de "Tarjeta de crédito"
+          const newAccount = await AccountDBService.create({
+            user_id: user.user_id,
+            name: 'Tarjeta de crédito',
+            type: 'credit_card',
+            balance: 0
+          });
+          accountId = newAccount.account_id;
+        }
+      }
+
+      const purchase = await CreditPurchaseDBService.create({
+        user_id: user.user_id,
+        account_id: accountId,
+        description,
+        total_amount,
+        installments,
+        interest_rate,
+        notes
+      });
+
+      const installmentAmount = parseFloat(purchase.installment_amount);
+
+      let response = `🛒 Compra a crédito registrada: "${description}"`;
+      response += `\n💰 Total: $${new Intl.NumberFormat('es-CO').format(total_amount)}`;
+      response += `\n📅 ${installments} cuotas de $${new Intl.NumberFormat('es-CO').format(installmentAmount)}`;
+
+      if (interest_rate > 0) {
+        response += `\n📊 Interés: ${interest_rate}%`;
+      }
+
+      response += '\n\nLo tengo controlado. Te avisaré cuando toque pagar. 💜';
+
+      return response;
+    } catch (error) {
+      Logger.error('Error en handleCreateCreditPurchaseCommand', error);
+      return `No pude registrar la compra a crédito. ${error.message} 💜`;
     }
   }
 }

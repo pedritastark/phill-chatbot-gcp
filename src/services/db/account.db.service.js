@@ -257,6 +257,28 @@ class AccountDBService {
   }
 
   /**
+   * Establecer balance absoluto de una cuenta
+   * @param {string} accountId - UUID de la cuenta
+   * @param {number} newBalance - Nuevo balance
+   */
+  async setBalance(accountId, newBalance) {
+    try {
+      await query(
+        `UPDATE accounts
+         SET balance = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE account_id = $1`,
+        [accountId, newBalance]
+      );
+
+      Logger.info(`Balance establecido para cuenta: ${accountId} = ${newBalance}`);
+    } catch (error) {
+      Logger.error('Error al establecer balance', error);
+      throw error;
+    }
+  }
+
+  /**
    * Desactiva una cuenta (soft delete)
    * @param {string} accountId - UUID de la cuenta
    */
