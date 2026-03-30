@@ -461,6 +461,7 @@ class ApiController {
                     name: updatedUser.name,
                     email: updatedUser.email,
                     phone: updatedUser.phone_number.replace('whatsapp:', ''),
+                    profilePhoto: updatedUser.profile_photo || null,
                     currency: updatedUser.currency,
                     language: updatedUser.language
                 }
