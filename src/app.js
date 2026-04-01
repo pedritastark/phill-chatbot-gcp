@@ -48,8 +48,8 @@ function createApp() {
   }));
 
   // Middlewares
-  app.use(bodyParser.urlencoded({ extended: false }));
-  app.use(bodyParser.json());
+  app.use(bodyParser.urlencoded({ extended: false, limit: '10mb' }));
+  app.use(bodyParser.json({ limit: '10mb' })); // Increased limit for profile photos (base64)
 
   // Middleware de logging para todas las peticiones
   app.use((req, res, next) => {
