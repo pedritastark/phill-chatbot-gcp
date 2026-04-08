@@ -3311,16 +3311,47 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
                 });
             }
 
-            // Get user's default account for the transaction
+            // Determine correct account for the transaction
             const AccountDBService = require('../services/db/account.db.service');
-            let defaultAccount = await AccountDBService.getDefaultAccount(user.user_id);
+            let targetAccount = null;
 
-            // If no default account, use the first available account
-            if (!defaultAccount) {
-                const allAccounts = await AccountDBService.getAccountsByUser(user.user_id);
+            try {
+                // 1. Try to find the associated bank using the email pattern
+                const emailBankPattern = await EmailDBService.findBankPattern(emailTransaction.email_from);
+                
+                if (emailBankPattern && (emailBankPattern.bank_name || emailBankPattern.bank_code)) {
+                    const allAccounts = await AccountDBService.findByUser(user.user_id);
+                    const normalizedBankName = emailBankPattern.bank_name ? emailBankPattern.bank_name.toLowerCase() : '';
+                    const normalizedBankCode = emailBankPattern.bank_code ? emailBankPattern.bank_code.toLowerCase() : '';
+                    
+                    targetAccount = allAccounts.find(acc => {
+                        const accountBankName = acc.bank_name ? acc.bank_name.toLowerCase() : '';
+                        const accountName = acc.name ? acc.name.toLowerCase() : '';
+                        
+                        return (normalizedBankName && (accountBankName.includes(normalizedBankName) || accountName.includes(normalizedBankName) || normalizedBankName.includes(accountName) || normalizedBankName.includes(accountBankName))) ||
+                               (normalizedBankCode && (accountBankName.includes(normalizedBankCode) || accountName.includes(normalizedBankCode)));
+                    });
+
+                    if (targetAccount) {
+                        Logger.info(`Matching account found for bank ${emailBankPattern.bank_name}: ${targetAccount.name}`);
+                    }
+                }
+            } catch (err) {
+                Logger.warning('Could not match bank pattern', err);
+            }
+
+            // 2. If no target account was found, use the user's default account
+            if (!targetAccount) {
+                targetAccount = await AccountDBService.getDefaultAccount(user.user_id);
+                Logger.info(`No specific account matched, using default: ${targetAccount ? targetAccount.name : 'None'}`);
+            }
+
+            // 3. If no default account, use the first available account
+            if (!targetAccount) {
+                const allAccounts = await AccountDBService.findByUser(user.user_id);
                 if (allAccounts && allAccounts.length > 0) {
-                    defaultAccount = allAccounts[0]; // Use first account as fallback
-                    Logger.info(`No default account found, using first account: ${defaultAccount.name}`);
+                    targetAccount = allAccounts[allAccounts.length - 1]; // Use first/last account as fallback
+                    Logger.info(`No default account found, using existing account: ${targetAccount.name}`);
                 } else {
                     return res.status(400).json({
                         success: false,
@@ -3338,7 +3369,7 @@ ${emailTx.detected_category ? `📂 Categoría: ${emailTx.detected_category}` : 
                 emailTransaction.detected_description,
                 emailTransaction.detected_category || 'otros',
                 null, // accountName
-                defaultAccount.account_id, // Use default account
+                targetAccount.account_id, // Use matched or default account
                 emailTransaction.detected_currency || 'COP',
                 'completed',
                 emailTransaction.email_date ? new Date(emailTransaction.email_date) : new Date() // Use email date
